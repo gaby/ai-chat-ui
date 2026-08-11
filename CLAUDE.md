@@ -63,6 +63,14 @@ Test infrastructure lives entirely in `tests/`:
 - **src/components/ai-elements/**: Vercel AI Elements wrappers (conversation, prompt-input, message, tool, reasoning, sources, etc.)
 - **src/components/ui/**: Radix UI and shadcn/ui components
 
+The shell is composed as sidebar → `AppHeader` → conversation → `ChatComposer`:
+
+- **app-header.tsx**: sidebar toggle, conversation title (also the tab title), new chat, theme toggle
+- **welcome-screen.tsx**: empty-conversation state with suggested prompts
+- **assistant-turn.tsx** / **user-bubble.tsx**: per-role message layout. An assistant turn is one avatar-gutter column holding that turn's reasoning, tool cards and prose
+- **chat-composer.tsx**: message box plus the per-run settings (model, effort, builtin tools) and the stop control
+- **tool-part-header.tsx**: collapsed tool-card row, including the one-line argument preview from `lib/tool-summary.ts`
+
 ### Key Frontend Concepts
 
 **Conversation Management:**
