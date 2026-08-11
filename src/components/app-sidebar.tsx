@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConversationList } from '@/components/conversation-list'
+import { RenameConversationDialog } from '@/components/rename-conversation-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,7 +28,8 @@ import {
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
 import { useConversations } from '@/hooks/useConversations'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
-import { deleteConversation as deleteConv } from '@/lib/chat-db'
+import { deleteConversation as deleteConv, saveConversation } from '@/lib/chat-db'
+import { conversationTitle } from '@/lib/conversation-title'
 import type { ConversationEntry } from '@/types'
 import { ModeToggle } from './mode-toggle'
 import logoSvg from '../assets/logo.svg'
@@ -59,24 +61,45 @@ function deleteConversation(conversationId: string) {
   })
 }
 
+function updateConversation(conversation: ConversationEntry, patch: Partial<ConversationEntry>) {
+  return saveConversation({ ...conversation, ...patch }).then(() => {
+    window.dispatchEvent(new Event('conversations-changed'))
+  })
+}
+
 export function AppSidebar() {
   const conversations = useConversations()
   const [conversationId] = useConversationIdFromUrl()
   const [query, setQuery] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<ConversationEntry | null>(null)
+  const [conversationToRename, setConversationToRename] = useState<ConversationEntry | null>(null)
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return conversations
-    return conversations.filter((entry) => (entry.firstMessage ?? '').toLowerCase().includes(needle))
+    return conversations.filter((entry) => conversationTitle(entry).toLowerCase().includes(needle))
   }, [conversations, query])
 
-  const handleDeleteClick = (e: React.MouseEvent, conversation: ConversationEntry) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDeleteClick = (conversation: ConversationEntry) => {
     setConversationToDelete(conversation)
     setDeleteDialogOpen(true)
+  }
+
+  const handleTogglePin = (conversation: ConversationEntry) => {
+    updateConversation(conversation, { pinned: !conversation.pinned }).catch((err: unknown) => {
+      console.error('Failed to pin conversation:', err)
+    })
+  }
+
+  const handleRenameSubmit = (title: string) => {
+    if (!conversationToRename) return
+    const conversation = conversationToRename
+    setConversationToRename(null)
+    updateConversation(conversation, { title }).catch((err: unknown) => {
+      console.error('Failed to rename conversation:', err)
+      toast.error('Failed to rename chat')
+    })
   }
 
   const handleConfirmDelete = () => {
@@ -146,6 +169,8 @@ export function AppSidebar() {
             conversations={filtered}
             activeId={conversationId}
             onNavigate={doLocalNavigation}
+            onRename={setConversationToRename}
+            onTogglePin={handleTogglePin}
             onDelete={handleDeleteClick}
           />
         )}
@@ -160,6 +185,15 @@ export function AppSidebar() {
         </div>
       </SidebarFooter>
 
+      <RenameConversationDialog
+        open={conversationToRename !== null}
+        initialTitle={conversationTitle(conversationToRename ?? undefined)}
+        onOpenChange={(open) => {
+          if (!open) setConversationToRename(null)
+        }}
+        onSubmit={handleRenameSubmit}
+      />
+
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent
           onKeyDown={(e) => {
@@ -172,7 +206,8 @@ export function AppSidebar() {
           <DialogHeader>
             <DialogTitle>Delete conversation?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this chat? This action cannot be undone.
+              &ldquo;{conversationTitle(conversationToDelete ?? undefined)}&rdquo; and its messages will be removed
+              from this browser. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

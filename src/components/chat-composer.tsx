@@ -1,5 +1,5 @@
 import type { ChatStatus } from 'ai'
-import { FilterIcon, SlidersHorizontalIcon, SquareIcon } from 'lucide-react'
+import { FilterIcon, SlidersHorizontalIcon, SquareIcon, XIcon } from 'lucide-react'
 import type { RefObject, SyntheticEvent } from 'react'
 
 import {
@@ -16,8 +16,8 @@ import {
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input'
 import { EffortSelect } from '@/components/effort-select'
-import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { getToolIcon } from '@/lib/tool-icons'
@@ -40,6 +40,8 @@ interface ChatComposerProps {
   onToggleTool: (id: string) => void
   onOpenFilters: () => void
   hiddenToolCount: number
+  /** Hidden on the welcome screen, where the suggestion chips sit in this spot. */
+  showHint?: boolean
 }
 
 /**
@@ -63,6 +65,7 @@ export function ChatComposer({
   onToggleTool,
   onOpenFilters,
   hiddenToolCount,
+  showHint = true,
 }: ChatComposerProps) {
   const isBusy = status === 'submitted' || status === 'streaming'
 
@@ -70,7 +73,9 @@ export function ChatComposer({
     <div className="mx-auto w-full max-w-3xl">
       <PromptInput onSubmit={onSubmit} className="ring-primary/25 rounded-2xl shadow-sm">
         <PromptInputTextarea
-          className="px-3.5 py-3"
+          // The vendored Textarea floors at min-h-16, which left a band of dead
+          // space under a one-line draft; grow from a single line instead.
+          className="min-h-11 px-3.5 py-3"
           ref={textareaRef}
           onChange={(e) => {
             onInputChange(e.target.value)
@@ -97,11 +102,6 @@ export function ChatComposer({
                     <DropdownMenuTrigger asChild>
                       <PromptInputButton variant="ghost" aria-label="Tools">
                         <SlidersHorizontalIcon className="size-4" />
-                        {enabledTools.length > 0 && (
-                          <Badge variant="secondary" className="h-4 px-1.5 text-[0.625rem] tabular-nums">
-                            {enabledTools.length}
-                          </Badge>
-                        )}
                       </PromptInputButton>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
@@ -135,6 +135,33 @@ export function ChatComposer({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+
+            {/* Active tools read as pills rather than a count behind a menu:
+                what the next message will run with should be visible without
+                opening anything. */}
+            {enabledTools.map((id) => {
+              const tool = availableTools.find((entry) => entry.id === id)
+              if (!tool) return null
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    onToggleTool(id)
+                  }}
+                  aria-label={`Turn off ${tool.name}`}
+                  className="border-primary/30 bg-primary/10 text-foreground hover:bg-primary/15 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm"
+                >
+                  {getToolIcon(tool.id, 'size-3.5 text-primary')}
+                  <span className="max-w-28 truncate">{tool.name}</span>
+                  <XIcon className="text-muted-foreground size-3" />
+                </button>
+              )
+            })}
+
+            {/* Hold the model select's footprint while /api/configure is in
+                flight, so the toolbar does not jump once it lands. */}
+            {(models.length === 0 || !model) && <Skeleton className="h-8 w-24 rounded-lg" />}
 
             {models.length > 0 && model && (
               <PromptInputModelSelect onValueChange={onModelChange} value={model}>
@@ -172,10 +199,12 @@ export function ChatComposer({
         </PromptInputToolbar>
       </PromptInput>
 
-      <p className="text-muted-foreground mt-2 hidden text-center text-xs sm:block">
-        <kbd className="font-sans">Enter</kbd> to send &middot; <kbd className="font-sans">Shift</kbd> +{' '}
-        <kbd className="font-sans">Enter</kbd> for a new line
-      </p>
+      {showHint && (
+        <p className="text-muted-foreground mt-2 hidden text-center text-xs sm:block">
+          <kbd className="font-sans">Enter</kbd> to send &middot; <kbd className="font-sans">Shift</kbd> +{' '}
+          <kbd className="font-sans">Enter</kbd> for a new line
+        </p>
+      )}
     </div>
   )
 }

@@ -7,6 +7,10 @@ test.describe('tool-call grouping', () => {
     await page.goto('/')
     await sendMessage(page, 'repeated-tool', 'weather everywhere')
 
+    // The group stays expanded while any call is still running, so wait for the
+    // run to finish before asserting on the collapsed state.
+    await expect(page.getByText('All weather lookups completed.')).toBeVisible()
+
     // The three get_weather calls collapse into a single group line showing the
     // tool name and an x3 count; no individual cards are visible yet.
     const group = page.locator('[data-slot="tool-call-group"]')

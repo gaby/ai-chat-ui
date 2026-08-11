@@ -25,7 +25,6 @@ import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts } from '@/lib/tool-grouping'
 import { getMessages, saveMessages, saveConversation } from '@/lib/chat-db'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
-import { cn } from '@/lib/utils'
 
 // TODO: if just a single model, don't show model selector, just a label.
 interface RemoteConfig {
@@ -323,17 +322,69 @@ const ChatInner = () => {
       isFiltered,
     )
 
+  const renderComposer = (showHint: boolean) => (
+    <ChatComposer
+      showHint={showHint}
+      input={input}
+      onInputChange={setInput}
+      onSubmit={handleSubmit}
+      onStop={() => {
+        stop().catch((error: unknown) => {
+          console.error('Error stopping generation:', error)
+        })
+      }}
+      status={status}
+      textareaRef={textareaRef}
+      models={configQuery.data?.models ?? []}
+      model={model}
+      onModelChange={setModel}
+      effort={effort}
+      onEffortChange={(value) => {
+        setEffort(value)
+        localStorage.setItem('effort', value)
+      }}
+      availableTools={availableTools}
+      enabledTools={enabledTools}
+      onToggleTool={handleToggleTool}
+      onOpenFilters={() => {
+        setFiltersDialogOpen(true)
+      }}
+      hiddenToolCount={filters.length}
+    />
+  )
+
+  const dialogs = (
+    <>
+      <EditMessageDialog
+        open={pendingEdit !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingEdit(null)
+        }}
+        onModify={handleModify}
+        onFork={handleFork}
+      />
+
+      <ToolFiltersDialog open={filtersDialogOpen} onOpenChange={setFiltersDialogOpen} />
+    </>
+  )
+
+  // An empty chat opens as one centred column — greeting, composer, starting
+  // points — rather than a blank page with the input pinned to the floor.
+  if (messages.length === 0 && status === 'ready') {
+    return (
+      <>
+        <div className="flex flex-1 items-center justify-center overflow-y-auto px-3 py-8">
+          <WelcomeScreen onSelect={handleSuggestion} composer={renderComposer(false)} />
+        </div>
+        {dialogs}
+      </>
+    )
+  }
+
   return (
     <>
       <Conversation className="h-full" aria-label="Conversation">
-        <ConversationContent
-          className={cn(
-            'mx-auto flex w-full max-w-3xl flex-col px-4 pt-2 pb-6',
-            messages.length === 0 && 'h-full justify-center',
-          )}
-        >
-          {messages.length === 0 && status === 'ready' && <WelcomeScreen onSelect={handleSuggestion} />}
-
+        <ConversationContent className="mx-auto flex w-full max-w-3xl flex-col px-4 pt-2 pb-6">
           {messages.map((message, messageIndex) => {
             if (message.role !== 'assistant') {
               return (
@@ -378,46 +429,9 @@ const ChatInner = () => {
       {/* The fade keeps text from colliding with the composer as it scrolls
           under the sticky footer. */}
       <div className="from-background pointer-events-none sticky bottom-0 h-6 bg-gradient-to-t to-transparent" />
-      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">
-        <ChatComposer
-          input={input}
-          onInputChange={setInput}
-          onSubmit={handleSubmit}
-          onStop={() => {
-            stop().catch((error: unknown) => {
-              console.error('Error stopping generation:', error)
-            })
-          }}
-          status={status}
-          textareaRef={textareaRef}
-          models={configQuery.data?.models ?? []}
-          model={model}
-          onModelChange={setModel}
-          effort={effort}
-          onEffortChange={(value) => {
-            setEffort(value)
-            localStorage.setItem('effort', value)
-          }}
-          availableTools={availableTools}
-          enabledTools={enabledTools}
-          onToggleTool={handleToggleTool}
-          onOpenFilters={() => {
-            setFiltersDialogOpen(true)
-          }}
-          hiddenToolCount={filters.length}
-        />
-      </div>
+      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">{renderComposer(true)}</div>
 
-      <EditMessageDialog
-        open={pendingEdit !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingEdit(null)
-        }}
-        onModify={handleModify}
-        onFork={handleFork}
-      />
-
-      <ToolFiltersDialog open={filtersDialogOpen} onOpenChange={setFiltersDialogOpen} />
+      {dialogs}
     </>
   )
 }

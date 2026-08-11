@@ -38,7 +38,8 @@ test.describe('conversation lifecycle', () => {
     await sendMessage(page, 'text', 'Delete me')
     await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
 
-    await sidebar(page).getByRole('button', { name: 'Delete conversation: Delete me' }).click({ force: true })
+    await sidebar(page).getByRole('button', { name: 'Conversation options: Delete me' }).click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
 
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Delete' }).click()
@@ -62,7 +63,8 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Keep this')).toBeVisible()
 
     const currentUrl = page.url()
-    await sidebar(page).getByRole('button', { name: 'Delete conversation: Remove this' }).click({ force: true })
+    await sidebar(page).getByRole('button', { name: 'Conversation options: Remove this' }).click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
 
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Delete' }).click()

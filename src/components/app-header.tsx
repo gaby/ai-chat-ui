@@ -1,6 +1,7 @@
-import { SquarePenIcon } from 'lucide-react'
-import { useEffect } from 'react'
+import { KeyboardIcon, SquarePenIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
+import { IS_MAC, KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -9,10 +10,11 @@ import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
 import { useConversations } from '@/hooks/useConversations'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { withBasePath } from '@/lib/base-path'
+import { conversationTitle } from '@/lib/conversation-title'
 
-const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
 const NEW_CHAT_SHORTCUT = IS_MAC ? '⇧⌘O' : 'Ctrl+Shift+O'
 const SIDEBAR_SHORTCUT = IS_MAC ? '⌘B' : 'Ctrl+B'
+const SHORTCUTS_SHORTCUT = IS_MAC ? '⌘/' : 'Ctrl+/'
 
 function startNewConversation() {
   window.history.pushState({}, '', withBasePath('/'))
@@ -22,23 +24,28 @@ function startNewConversation() {
 /**
  * Slim application bar above the conversation. It gives the chat a fixed
  * anchor: where you are (the conversation title), how to get out of a
- * collapsed sidebar, and the two actions people reach for most.
+ * collapsed sidebar, and the actions people reach for most.
  */
 export function AppHeader() {
   const [conversationId] = useConversationIdFromUrl()
   const conversations = useConversations()
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
   const current = conversations.find((entry) => entry.id === conversationId)
-  const title = conversationId === '/' ? 'New chat' : (current?.firstMessage ?? 'Conversation')
+  const isNew = conversationId === '/'
+  const title = isNew ? 'New chat' : conversationTitle(current)
 
-  useDocumentTitle(conversationId === '/' ? null : (current?.firstMessage ?? null))
+  useDocumentTitle(isNew ? null : title)
 
-  // Cmd/Ctrl+Shift+O starts a new chat, matching the sidebar's built-in
-  // Cmd/Ctrl+B toggle.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.shiftKey && event.key.toLowerCase() === 'o') {
         event.preventDefault()
         startNewConversation()
+      } else if (event.key === '/') {
+        event.preventDefault()
+        setShortcutsOpen((open) => !open)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -55,11 +62,30 @@ export function AppHeader() {
         </TooltipTrigger>
         <TooltipContent>Toggle sidebar &middot; {SIDEBAR_SHORTCUT}</TooltipContent>
       </Tooltip>
+
       <div className="min-w-0 flex-1">
         <h2 className="truncate text-sm font-medium" title={title}>
           {title}
         </h2>
       </div>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Keyboard shortcuts"
+            onClick={() => {
+              setShortcutsOpen(true)
+            }}
+            className="text-muted-foreground hover:text-foreground hidden sm:inline-flex"
+          >
+            <KeyboardIcon className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Keyboard shortcuts &middot; {SHORTCUTS_SHORTCUT}</TooltipContent>
+      </Tooltip>
+
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -74,7 +100,10 @@ export function AppHeader() {
         </TooltipTrigger>
         <TooltipContent>New chat &middot; {NEW_CHAT_SHORTCUT}</TooltipContent>
       </Tooltip>
+
       <ModeToggle className="text-muted-foreground hover:text-foreground" />
+
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </header>
   )
 }

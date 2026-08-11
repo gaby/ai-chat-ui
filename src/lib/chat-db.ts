@@ -56,7 +56,9 @@ export async function getConversations(): Promise<ConversationEntry[]> {
     request.onsuccess = () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- IDB getAll() returns untyped data
       const conversations: ConversationEntry[] = request.result
-      conversations.sort((a, b) => b.timestamp - a.timestamp)
+      // Pinned first, then newest first. Sorting here keeps every reader
+      // (sidebar, header lookup) on the same order.
+      conversations.sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || b.timestamp - a.timestamp)
       resolve(conversations)
     }
   })

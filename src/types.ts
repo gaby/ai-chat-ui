@@ -12,6 +12,10 @@ export interface BuiltinTool {
 export interface ConversationEntry {
   id: string
   firstMessage?: string
+  /** User-chosen name, overriding the first-message fallback. */
+  title?: string
+  /** Kept at the top of the sidebar, above the date buckets. */
+  pinned?: boolean
   timestamp: number
   forkOf?: {
     conversationId: string
