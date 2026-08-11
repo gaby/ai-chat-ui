@@ -9,10 +9,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
 import { useConversationsState } from '@/hooks/useConversations'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { withBasePath } from '@/lib/base-path'
+import { stripBasePath, withBasePath } from '@/lib/base-path'
 import { conversationTitle } from '@/lib/conversation-title'
 
 function startNewConversation() {
+  // Already on a new chat: pushing again stacks identical `/` entries, and Back
+  // then has to walk through every one of them before it appears to do
+  // anything.
+  if (stripBasePath(window.location.pathname) === '/') return
   window.history.pushState({}, '', withBasePath('/'))
   window.dispatchEvent(new Event('history-state-changed'))
 }

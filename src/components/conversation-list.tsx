@@ -13,7 +13,6 @@ import {
 import { withBasePath } from '@/lib/base-path'
 import { conversationTitle } from '@/lib/conversation-title'
 import { absoluteTime, groupByDate, relativeTime, type DateGroup } from '@/lib/format-time'
-import { cn } from '@/lib/utils'
 import type { ConversationEntry } from '@/types'
 
 interface ConversationListProps {
@@ -62,7 +61,11 @@ export function ConversationList({
                     <a
                       href={withBasePath(conversation.id)}
                       onClick={onNavigate}
-                      className={cn('flex items-start gap-2', isActive && 'pointer-events-none')}
+                      // The active row stays clickable: navigation to where we
+                      // already are is a no-op in the handler, and on a phone
+                      // tapping the row you are on is a reasonable way to
+                      // dismiss the drawer covering it.
+                      className="flex items-start gap-2"
                     >
                       <ConversationIcon conversation={conversation} />
                       <span className="flex min-w-0 flex-col">

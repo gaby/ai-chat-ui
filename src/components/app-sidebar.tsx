@@ -24,6 +24,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
 import { useConversations } from '@/hooks/useConversations'
@@ -42,10 +43,13 @@ function doLocalNavigation(e: React.MouseEvent) {
     return
   }
   const path = new URL((e.currentTarget as HTMLAnchorElement).href).pathname
+  e.preventDefault()
+  // Going where we already are: pushing would stack a duplicate entry that Back
+  // has to walk through before it appears to do anything.
+  if (path === window.location.pathname) return
   window.history.pushState({}, '', path)
   // custom event to notify other components of the URL change
   window.dispatchEvent(new Event('history-state-changed'))
-  e.preventDefault()
 }
 
 function deleteConversation(conversationId: string) {
@@ -64,6 +68,7 @@ function updateConversation(conversation: ConversationEntry, patch: Partial<Conv
 }
 
 export function AppSidebar() {
+  const { setOpenMobile } = useSidebar()
   const conversations = useConversations()
   const [conversationId] = useConversationIdFromUrl()
   const [query, setQuery] = useState('')
@@ -83,6 +88,17 @@ export function AppSidebar() {
     if (!needle) return conversations
     return conversations.filter((entry) => conversationTitle(entry).toLowerCase().includes(needle))
   }, [conversations, query])
+
+  // On a phone the sidebar is a sheet over the conversation. Left open after a
+  // selection it covers the chat that was just picked, and `Sidebar` hides the
+  // sheet's own close button, so the way out is an undiscoverable tap on the
+  // overlay. `doLocalNavigation` only calls `preventDefault` for navigations it
+  // handled itself — a modified click still opens a new tab and leaves the
+  // sheet alone.
+  const handleNavigate = (e: React.MouseEvent) => {
+    doLocalNavigation(e)
+    if (e.defaultPrevented) setOpenMobile(false)
+  }
 
   const handleDeleteClick = (conversation: ConversationEntry) => {
     setConversationToDelete(conversation)
@@ -140,7 +156,7 @@ export function AppSidebar() {
               tooltip="New conversation"
               className="bg-primary/10 text-foreground hover:bg-primary/15 font-medium"
             >
-              <a href={withBasePath('/')} onClick={doLocalNavigation}>
+              <a href={withBasePath('/')} onClick={handleNavigate}>
                 <PlusIcon className="text-primary" />
                 <span>New conversation</span>
               </a>
@@ -176,7 +192,7 @@ export function AppSidebar() {
           <ConversationList
             conversations={filtered}
             activeId={conversationId}
-            onNavigate={doLocalNavigation}
+            onNavigate={handleNavigate}
             onRename={setConversationToRename}
             onTogglePin={handleTogglePin}
             onDelete={handleDeleteClick}
