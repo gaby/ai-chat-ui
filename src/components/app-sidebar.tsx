@@ -1,8 +1,9 @@
-import { CirclePlus, MessageCircle, Trash } from 'lucide-react'
+import { PlusIcon, SearchIcon } from 'lucide-react'
 import type React from 'react'
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConversationList } from '@/components/conversation-list'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,50 +13,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
-import { cn } from '@/lib/utils'
-import type { ConversationEntry } from '@/types'
-import { getConversations, deleteConversation as deleteConv } from '@/lib/chat-db'
+import { useConversations } from '@/hooks/useConversations'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
+import { deleteConversation as deleteConv } from '@/lib/chat-db'
+import type { ConversationEntry } from '@/types'
 import { ModeToggle } from './mode-toggle'
 import logoSvg from '../assets/logo.svg'
 
-function useConversations(): ConversationEntry[] {
-  const [conversations, setConversations] = useState<ConversationEntry[]>([])
-
-  useEffect(() => {
-    const loadConversations = () => {
-      getConversations()
-        .then(setConversations)
-        .catch((err: unknown) => {
-          console.error('Failed to load conversations:', err)
-        })
-    }
-
-    loadConversations()
-
-    window.addEventListener('conversations-changed', loadConversations)
-
-    return () => {
-      window.removeEventListener('conversations-changed', loadConversations)
-    }
-  }, [])
-
-  return conversations
-}
+// Below this many conversations the list is short enough to scan, and a search
+// box would just be chrome.
+const SEARCH_THRESHOLD = 6
 
 function doLocalNavigation(e: React.MouseEvent) {
   if (e.button !== 0 || e.metaKey || e.ctrlKey) {
@@ -83,8 +62,15 @@ function deleteConversation(conversationId: string) {
 export function AppSidebar() {
   const conversations = useConversations()
   const [conversationId] = useConversationIdFromUrl()
+  const [query, setQuery] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<ConversationEntry | null>(null)
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return conversations
+    return conversations.filter((entry) => (entry.firstMessage ?? '').toLowerCase().includes(needle))
+  }, [conversations, query])
 
   const handleDeleteClick = (e: React.MouseEvent, conversation: ConversationEntry) => {
     e.preventDefault()
@@ -109,111 +95,101 @@ export function AppSidebar() {
   }
 
   return (
-    <TooltipProvider>
-      <Sidebar collapsible="icon">
-        <SidebarHeader>
-          <SidebarTrigger className="ml-auto" />
-          <div className="ml-2 flex items-center">
-            <h1 className="text-l font-medium text-balance truncate whitespace-nowrap">
-              <img src={logoSvg} className="inline h-4 mr-2 mb-1" />
-              <span className="group-data-[state=collapsed]:invisible">Pydantic AI</span>
-            </h1>
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="gap-3">
+        <div className="flex h-8 items-center gap-2 px-1">
+          <img src={logoSvg} alt="" className="size-5 shrink-0" />
+          <span className="truncate text-sm font-semibold group-data-[state=collapsed]:hidden">Pydantic AI</span>
+        </div>
+
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="New conversation"
+              className="bg-primary/10 text-foreground hover:bg-primary/15 font-medium"
+            >
+              <a href={withBasePath('/')} onClick={doLocalNavigation}>
+                <PlusIcon className="text-primary" />
+                <span>New conversation</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        {conversations.length >= SEARCH_THRESHOLD && (
+          <div className="relative group-data-[state=collapsed]:hidden">
+            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+              }}
+              placeholder="Search conversations"
+              aria-label="Search conversations"
+              className="h-8 pl-8 text-sm"
+            />
           </div>
-        </SidebarHeader>
+        )}
+      </SidebarHeader>
 
-        <SidebarContent>
+      <SidebarContent className="custom-scrollbar">
+        {filtered.length === 0 ? (
           <SidebarGroup>
-            <SidebarMenu className="mb-2">
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Start a new conversation">
-                  <a href={withBasePath('/')} onClick={doLocalNavigation}>
-                    <CirclePlus />
-                    <span>New conversation</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {conversations.map((conversation, index) => (
-                  <SidebarMenuItem key={index} className="group/sidebar-menu-item">
-                    <div className="flex items-center gap-1 h-auto">
-                      <SidebarMenuButton asChild tooltip={conversation.firstMessage} className="flex-1">
-                        <a
-                          href={withBasePath(conversation.id)}
-                          onClick={doLocalNavigation}
-                          className={cn('h-auto flex items-start gap-2', {
-                            'bg-accent pointer-events-none': conversation.id === conversationId,
-                          })}
-                        >
-                          <MessageCircle className="size-3 mt-1" />
-                          <span className="flex flex-col items-start">
-                            <span className="truncate max-w-44">{conversation.firstMessage}</span>
-                            <span className="text-xs opacity-30">
-                              {new Date(conversation.timestamp).toLocaleString()}
-                            </span>
-                          </span>
-                        </a>
-                      </SidebarMenuButton>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-1.5 opacity-0 group-hover/sidebar-menu-item:opacity-100 transition-opacity group-data-[state=collapsed]:hidden absolute right-0 self-start"
-                            onClick={(e) => {
-                              handleDeleteClick(e, conversation)
-                            }}
-                          >
-                            <Trash className="size-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete conversation</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
+            <p className="text-muted-foreground px-2 py-6 text-center text-xs group-data-[state=collapsed]:hidden">
+              {conversations.length === 0 ? 'No conversations yet.' : 'No conversations match your search.'}
+            </p>
           </SidebarGroup>
-        </SidebarContent>
+        ) : (
+          <ConversationList
+            conversations={filtered}
+            activeId={conversationId}
+            onNavigate={doLocalNavigation}
+            onDelete={handleDeleteClick}
+          />
+        )}
+      </SidebarContent>
 
-        <SidebarFooter>
-          <ModeToggle />
-        </SidebarFooter>
+      <SidebarFooter>
+        <div className="flex items-center justify-between gap-2 group-data-[state=collapsed]:justify-center">
+          <span className="text-muted-foreground text-xs group-data-[state=collapsed]:hidden">
+            Chats are stored in this browser
+          </span>
+          <ModeToggle className="size-8 shrink-0" />
+        </div>
+      </SidebarFooter>
 
-        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <DialogContent
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                handleConfirmDelete()
-              }
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Delete conversation?</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this chat? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDeleteDialogOpen(false)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleConfirmDelete} autoFocus>
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </Sidebar>
-    </TooltipProvider>
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleConfirmDelete()
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete conversation?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this chat? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete} autoFocus>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Sidebar>
   )
 }

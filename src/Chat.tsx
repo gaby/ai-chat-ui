@@ -1,33 +1,18 @@
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
-import { Loader } from '@/components/ai-elements/loader'
-import {
-  PromptInput,
-  PromptInputButton,
-  PromptInputModelSelect,
-  PromptInputModelSelectContent,
-  PromptInputModelSelectItem,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectValue,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-  PromptInputTools,
-} from '@/components/ai-elements/prompt-input'
 import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources'
-import { EffortSelect } from '@/components/effort-select'
+import { AssistantTurn } from '@/components/assistant-turn'
+import { ChatComposer } from '@/components/chat-composer'
+import { ChatError } from '@/components/chat-error'
 import { EditMessageDialog } from '@/components/edit-message-dialog'
 import { HiddenToolsGroup } from '@/components/hidden-tools-group'
+import { ThinkingIndicator } from '@/components/thinking-indicator'
 import { ToolCallGroup } from '@/components/tool-call-group'
 import { ToolFiltersDialog } from '@/components/tool-filters-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { Switch } from '@/components/ui/switch'
+import { WelcomeScreen } from '@/components/welcome-screen'
 import { ToolFiltersProvider, useToolFilters } from '@/contexts/tool-filters'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import type { UIDataTypes, UIMessage, UIMessagePart, UITools } from 'ai'
-import { ArrowRightIcon, FilterIcon, RefreshCcwIcon, Settings2Icon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
@@ -35,23 +20,12 @@ import { useThrottle } from '@uidotdev/usehooks'
 import { nanoid } from 'nanoid'
 import { useConversationIdFromUrl } from './hooks/useConversationIdFromUrl'
 import { Part } from './Part'
-import type { ConversationEntry } from './types'
-import { getToolIcon } from '@/lib/tool-icons'
+import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts } from '@/lib/tool-grouping'
 import { getMessages, saveMessages, saveConversation } from '@/lib/chat-db'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
-
-interface ModelConfig {
-  id: string
-  name: string
-  builtinTools: string[]
-}
-
-interface BuiltinTool {
-  name: string
-  id: string
-}
+import { cn } from '@/lib/utils'
 
 // TODO: if just a single model, don't show model selector, just a label.
 interface RemoteConfig {
@@ -65,7 +39,7 @@ async function getModels() {
 }
 
 const ChatInner = () => {
-  const { isFiltered } = useToolFilters()
+  const { isFiltered, filters } = useToolFilters()
   const [filtersDialogOpen, setFiltersDialogOpen] = useState(false)
   const [input, setInput] = useState('')
   const [model, setModel] = useState('')
@@ -88,7 +62,7 @@ const ChatInner = () => {
         body: () => ({ model: modelRef.current, builtinTools: enabledToolsRef.current, effort: effortRef.current }),
       }),
   )
-  const { messages, sendMessage, status, setMessages, regenerate, error, clearError, addToolApprovalResponse } =
+  const { messages, sendMessage, status, setMessages, regenerate, error, clearError, addToolApprovalResponse, stop } =
     useChat({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -310,172 +284,127 @@ const ChatInner = () => {
     return configQuery.data?.builtinTools.filter((tool) => enabledToolIds.includes(tool.id)) ?? []
   }, [configQuery.data, model])
 
+  const handleToggleTool = useCallback((id: string) => {
+    setEnabledTools((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]))
+  }, [])
+
+  const handleSuggestion = useCallback((prompt: string) => {
+    setInput(prompt)
+    const textarea = textareaRef.current
+    textarea?.focus()
+    // Land the caret at the end so an open-ended starter ("Explain how ") can
+    // just be typed into.
+    textarea?.setSelectionRange(prompt.length, prompt.length)
+  }, [])
+
+  const renderTurn = (message: UIMessage, messageIndex: number) =>
+    renderMessageParts(
+      message,
+      (part, i) => (
+        <Part
+          key={`${message.id}-${i}`}
+          part={part}
+          message={message}
+          status={status}
+          index={i}
+          regen={regen}
+          lastMessage={message.id === messages.at(-1)?.id}
+          onApprovalResponse={addToolApprovalResponse}
+          isEditing={editingMessageId === message.id}
+          editDraft={editDraftsRef.current.get(message.id)}
+          onStartEdit={handleStartEdit}
+          onCancelEdit={handleCancelEdit}
+          onSubmitEdit={handleSubmitEdit}
+          conversationId={conversationId}
+          messageIndex={messageIndex}
+          onNavigateToFork={handleNavigateToFork}
+        />
+      ),
+      isFiltered,
+    )
+
   return (
     <>
       <Conversation className="h-full">
-        <ConversationContent>
-          {messages.map((message, messageIndex) => (
-            <div key={message.id} className={message.role === 'user' ? 'group/user-message' : undefined}>
-              {message.role === 'assistant' &&
-                message.parts.filter((part) => part.type === 'source-url').length > 0 && (
-                  <Sources>
-                    <SourcesTrigger count={message.parts.filter((part) => part.type === 'source-url').length} />
-                    {message.parts
-                      .filter((part) => part.type === 'source-url')
-                      .map((part, i) => (
-                        <SourcesContent key={`${message.id}-${i}`}>
-                          <Source key={`${message.id}-${i}`} href={part.url} title={part.url} />
-                        </SourcesContent>
-                      ))}
+        <ConversationContent
+          className={cn(
+            'mx-auto flex w-full max-w-3xl flex-col px-4 pt-2 pb-6',
+            messages.length === 0 && 'h-full justify-center',
+          )}
+        >
+          {messages.length === 0 && status === 'ready' && <WelcomeScreen onSelect={handleSuggestion} />}
+
+          {messages.map((message, messageIndex) => {
+            if (message.role !== 'assistant') {
+              return (
+                <div key={message.id} className="group/user-message">
+                  {renderTurn(message, messageIndex)}
+                </div>
+              )
+            }
+
+            const sourceParts = message.parts.filter((part) => part.type === 'source-url')
+            return (
+              <AssistantTurn key={message.id}>
+                {sourceParts.length > 0 && (
+                  <Sources className="mb-0">
+                    <SourcesTrigger count={sourceParts.length} />
+                    {sourceParts.map((part, i) => (
+                      <SourcesContent key={`${message.id}-source-${i}`}>
+                        <Source href={part.url} title={part.url} />
+                      </SourcesContent>
+                    ))}
                   </Sources>
                 )}
-              {renderMessageParts(
-                message,
-                (part, i) => (
-                  <Part
-                    key={`${message.id}-${i}`}
-                    part={part}
-                    message={message}
-                    status={status}
-                    index={i}
-                    regen={regen}
-                    lastMessage={message.id === messages.at(-1)?.id}
-                    onApprovalResponse={addToolApprovalResponse}
-                    isEditing={editingMessageId === message.id}
-                    editDraft={editDraftsRef.current.get(message.id)}
-                    onStartEdit={handleStartEdit}
-                    onCancelEdit={handleCancelEdit}
-                    onSubmitEdit={handleSubmitEdit}
-                    conversationId={conversationId}
-                    messageIndex={messageIndex}
-                    onNavigateToFork={handleNavigateToFork}
-                  />
-                ),
-                isFiltered,
-              )}
-            </div>
-          ))}
-          {status === 'submitted' && <Loader />}
+                {renderTurn(message, messageIndex)}
+              </AssistantTurn>
+            )
+          })}
+
+          {status === 'submitted' && (
+            <AssistantTurn>
+              <ThinkingIndicator />
+            </AssistantTurn>
+          )}
+
           {status === 'error' && error && (
-            <div className="px-4 py-3 mx-4 my-2 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-sm">
-              <div>
-                <strong>Error:</strong> {error.message}
-              </div>
-              <div className="flex gap-2 mt-3">
-                <Button variant="outline" size="sm" onClick={handleRetry}>
-                  <RefreshCcwIcon className="size-4" />
-                  Retry
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleContinue}>
-                  <ArrowRightIcon className="size-4" />
-                  Continue
-                </Button>
-              </div>
-            </div>
+            <ChatError message={error.message} onRetry={handleRetry} onContinue={handleContinue} />
           )}
         </ConversationContent>
-        <ConversationScrollButton />
+        <ConversationScrollButton className="bg-background shadow-md" />
       </Conversation>
 
-      <div className="sticky bottom-0 p-3">
-        <PromptInput onSubmit={handleSubmit}>
-          <PromptInputTextarea
-            ref={textareaRef}
-            onChange={(e) => {
-              setInput(e.target.value)
-            }}
-            value={input}
-            autoFocus={true}
-          />
-          <PromptInputToolbar>
-            <PromptInputTools>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PromptInputButton
-                    variant="outline"
-                    aria-label="Hidden tools"
-                    onClick={() => {
-                      setFiltersDialogOpen(true)
-                    }}
-                  >
-                    <FilterIcon className="size-4" />
-                  </PromptInputButton>
-                </TooltipTrigger>
-                <TooltipContent>Hidden tools</TooltipContent>
-              </Tooltip>
-              {availableTools.length > 0 && (
-                <DropdownMenu>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DropdownMenuTrigger asChild>
-                        <PromptInputButton variant="outline">
-                          <Settings2Icon className="size-4" />
-                        </PromptInputButton>
-                      </DropdownMenuTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>Tools</TooltipContent>
-                  </Tooltip>
-                  <DropdownMenuContent align="start">
-                    {availableTools.map((tool) => (
-                      <div
-                        key={tool.id}
-                        className="flex items-center justify-between gap-3 px-2 py-1.5 cursor-pointer hover:bg-accent rounded-sm"
-                        onClick={() => {
-                          setEnabledTools((prev) =>
-                            prev.includes(tool.id) ? prev.filter((id) => id !== tool.id) : [...prev, tool.id],
-                          )
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          {getToolIcon(tool.id)}
-                          <span className="text-sm">{tool.name}</span>
-                        </div>
-                        <Switch
-                          checked={enabledTools.includes(tool.id)}
-                          onCheckedChange={(checked) => {
-                            setEnabledTools((prev) =>
-                              checked ? [...prev, tool.id] : prev.filter((id) => id !== tool.id),
-                            )
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {configQuery.data && model && (
-                <PromptInputModelSelect
-                  onValueChange={(value) => {
-                    setModel(value)
-                  }}
-                  value={model}
-                >
-                  <PromptInputModelSelectTrigger>
-                    <PromptInputModelSelectValue />
-                  </PromptInputModelSelectTrigger>
-                  <PromptInputModelSelectContent>
-                    {(configQuery.data as { models: { id: string; name: string }[] }).models.map((model) => (
-                      <PromptInputModelSelectItem key={model.id} value={model.id}>
-                        {model.name}
-                      </PromptInputModelSelectItem>
-                    ))}
-                  </PromptInputModelSelectContent>
-                </PromptInputModelSelect>
-              )}
-              <EffortSelect
-                value={effort}
-                onValueChange={(v) => {
-                  setEffort(v)
-                  localStorage.setItem('effort', v)
-                }}
-              />
-            </PromptInputTools>
-            <PromptInputSubmit disabled={!input} status={status} />
-          </PromptInputToolbar>
-        </PromptInput>
+      {/* The fade keeps text from colliding with the composer as it scrolls
+          under the sticky footer. */}
+      <div className="from-background pointer-events-none sticky bottom-0 h-6 bg-gradient-to-t to-transparent" />
+      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">
+        <ChatComposer
+          input={input}
+          onInputChange={setInput}
+          onSubmit={handleSubmit}
+          onStop={() => {
+            stop().catch((error: unknown) => {
+              console.error('Error stopping generation:', error)
+            })
+          }}
+          status={status}
+          textareaRef={textareaRef}
+          models={configQuery.data?.models ?? []}
+          model={model}
+          onModelChange={setModel}
+          effort={effort}
+          onEffortChange={(value) => {
+            setEffort(value)
+            localStorage.setItem('effort', value)
+          }}
+          availableTools={availableTools}
+          enabledTools={enabledTools}
+          onToggleTool={handleToggleTool}
+          onOpenFilters={() => {
+            setFiltersDialogOpen(true)
+          }}
+          hiddenToolCount={filters.length}
+        />
       </div>
 
       <EditMessageDialog
@@ -558,7 +487,9 @@ function hasIncompleteToolPart(parts: UIMessagePart<UIDataTypes, UITools>[]): bo
   )
 }
 
-const MAX_FIRST_MESSAGE_LENGTH = 30
+// Long enough to make a useful header title; the sidebar truncates its own row
+// with CSS rather than relying on this.
+const MAX_FIRST_MESSAGE_LENGTH = 100
 
 function saveConversationEntry(newConversationId: string, firstMessage: string, forkOf?: ConversationEntry['forkOf']) {
   const trimmedFirstMessage =

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import Chat from './Chat.tsx'
+import { AppHeader } from './components/app-header.tsx'
 import { AppSidebar } from './components/app-sidebar.tsx'
 import { ThemeProvider } from './components/theme-provider.tsx'
-import { SidebarProvider } from './components/ui/sidebar.tsx'
+import { SidebarInset, SidebarProvider } from './components/ui/sidebar.tsx'
 import { Toaster } from './components/ui/sonner.tsx'
-import { cn } from './lib/utils.ts'
+import { TooltipProvider } from './components/ui/tooltip.tsx'
 import { migrateFromLocalStorage } from './lib/chat-db.ts'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -32,20 +33,16 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="pydantic-chat-ui-theme">
-        <SidebarProvider defaultOpen>
-          <AppSidebar />
+        <TooltipProvider delayDuration={300}>
+          <SidebarProvider defaultOpen>
+            <AppSidebar />
 
-          <div className="flex flex-col justify-center flex-1 h-screen overflow-hidden">
-            <div
-              className={cn(
-                'flex flex-col max-w-4xl mx-auto relative w-full basis-[100vh] overflow-hidden',
-                'has-[.stick-to-bottom:empty]:overflow-visible has-[.stick-to-bottom:empty]:basis-[0px] transition-[flex-basis] duration-200',
-              )}
-            >
-              {ready && <Chat />}
-            </div>
-          </div>
-        </SidebarProvider>
+            <SidebarInset className="h-svh min-w-0 overflow-hidden">
+              <AppHeader />
+              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">{ready && <Chat />}</div>
+            </SidebarInset>
+          </SidebarProvider>
+        </TooltipProvider>
       </ThemeProvider>
       <Toaster richColors />
     </QueryClientProvider>

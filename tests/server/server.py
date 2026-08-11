@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Literal
@@ -71,6 +72,16 @@ async def stream_text(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str]:
     yield "Hello from the test server!"
+
+
+async def stream_slow(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str]:
+    """Streams slowly so specs can observe in-flight UI (thinking indicator, stop button)."""
+    await asyncio.sleep(1.0)
+    for chunk in ["Taking ", "my ", "time ", "here."]:
+        yield chunk
+        await asyncio.sleep(0.6)
 
 
 async def stream_markdown(
@@ -206,6 +217,7 @@ async def stream_repeated_approval(
 models: dict[str, object] = {
     "text": FunctionModel(stream_function=stream_text),
     "markdown": FunctionModel(stream_function=stream_markdown),
+    "slow": FunctionModel(stream_function=stream_slow),
     "tool": FunctionModel(stream_function=stream_tool),
     "multi-tool": FunctionModel(stream_function=stream_multi_tool),
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),

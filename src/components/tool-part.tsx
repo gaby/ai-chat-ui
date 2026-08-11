@@ -1,5 +1,6 @@
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
+import { Tool, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ToolApprovalPrompt } from '@/components/tool-approval-prompt'
+import { ToolPartHeader } from '@/components/tool-part-header'
 import { ToolOutputCode } from '@/components/tool-output-code'
 import { RunCodeInput } from '@/components/run-code-input'
 import { isRunCodeOutput, RunCodeOutput } from '@/components/run-code-output'
@@ -32,7 +33,12 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
   const isRunCode = toolName === 'run_code'
 
   return (
-    <Tool data-tool-name={toolName} open={open} onOpenChange={setOpen} className="group/tool-part relative">
+    <Tool
+      data-tool-name={toolName}
+      open={open}
+      onOpenChange={setOpen}
+      className="group/tool-part bg-card relative mb-0 rounded-xl"
+    >
       <button
         type="button"
         aria-label="Hide this tool"
@@ -40,15 +46,11 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
         onClick={() => {
           addFilter(toolName)
         }}
-        className="absolute top-2.5 right-9 z-10 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/tool-part:opacity-100"
+        className="text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 z-10 rounded p-1 opacity-0 transition-opacity group-hover/tool-part:opacity-100 focus-visible:opacity-100"
       >
         <EyeOffIcon className="size-3.5" />
       </button>
-      {part.type === 'dynamic-tool' ? (
-        <ToolHeader type={part.type} state={part.state} toolName={part.toolName} />
-      ) : (
-        <ToolHeader type={part.type} state={part.state} />
-      )}
+      <ToolPartHeader toolName={toolName} state={part.state} input={part.input} />
       <ToolContent>
         {open && (
           <>

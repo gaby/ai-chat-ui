@@ -1,21 +1,13 @@
-import { Message, MessageContent } from '@/components/ai-elements/message'
-
 import { Actions, Action } from '@/components/ai-elements/actions'
 import { Response } from '@/components/ai-elements/response'
-import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  PencilIcon,
-  RefreshCcwIcon,
-  XIcon,
-} from 'lucide-react'
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
 import type { ChatAddToolApproveResponseFunction, UIDataTypes, UIMessagePart, UITools, UIMessage } from 'ai'
 import { useEffect, useState } from 'react'
 import { useForkSiblings } from '@/hooks/useForkSiblings'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
+import { CopyButton } from '@/components/copy-button'
 import { ToolPart } from '@/components/tool-part'
+import { UserBubble } from '@/components/user-bubble'
 
 interface PartProps {
   part: UIMessagePart<UIDataTypes, UITools>
@@ -62,116 +54,114 @@ export function Part({
     }
   }, [isEditing])
 
-  function copy(text: string) {
-    navigator.clipboard.writeText(text).catch((error: unknown) => {
-      console.error('Error copying text:', error)
-    })
-  }
-
   if (part.type === 'text') {
     if (message.role === 'user' && isEditing) {
       return (
-        <div className="py-4">
-          <Message from="user">
-            <MessageContent>
-              <textarea
-                className="w-full bg-transparent resize-none outline-none text-sm min-h-[60px]"
-                value={editText}
-                onChange={(e) => {
-                  setEditText(e.target.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    onSubmitEdit?.(message.id, editText)
-                  } else if (e.key === 'Escape') {
-                    onCancelEdit?.(message.id, editText)
-                  }
-                }}
-                autoFocus
-              />
-            </MessageContent>
-          </Message>
+        <div className="py-3">
+          <UserBubble className="w-full max-w-full sm:max-w-full">
+            <textarea
+              className="min-h-[60px] w-full resize-none bg-transparent text-sm outline-none"
+              value={editText}
+              onChange={(e) => {
+                setEditText(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  onSubmitEdit?.(message.id, editText)
+                } else if (e.key === 'Escape') {
+                  onCancelEdit?.(message.id, editText)
+                }
+              }}
+              autoFocus
+            />
+          </UserBubble>
           <Actions className="mt-1 justify-end">
             <Action
               onClick={() => {
                 onSubmitEdit?.(message.id, editText)
               }}
               label="Submit edit"
-              className="text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+              tooltip="Submit edit"
+              className="text-primary hover:text-primary"
             >
-              <CheckIcon className="size-3" />
+              <CheckIcon className="size-3.5" />
             </Action>
             <Action
               onClick={() => {
                 onCancelEdit?.(message.id, editText)
               }}
               label="Cancel edit"
-              className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+              tooltip="Cancel edit"
+              className="text-destructive hover:text-destructive"
             >
-              <XIcon className="size-3" />
+              <XIcon className="size-3.5" />
             </Action>
           </Actions>
         </div>
       )
     }
 
-    return (
-      <div className="py-4">
-        <Message from={message.role}>
-          <MessageContent>
+    if (message.role === 'user') {
+      return (
+        <div className="py-3">
+          <UserBubble>
             <Response>{part.text}</Response>
-          </MessageContent>
-        </Message>
-        {message.role === 'assistant' && index === message.parts.length - 1 && (
-          <Actions className="mt-1">
+          </UserBubble>
+          {index === message.parts.length - 1 && (
+            <div className="mt-1 flex items-center justify-end gap-2">
+              {status !== 'submitted' && status !== 'streaming' && (
+                <Actions className="opacity-0 transition-opacity group-hover/user-message:opacity-100 focus-within:opacity-100">
+                  <Action
+                    onClick={() => {
+                      onStartEdit?.(message.id)
+                    }}
+                    label="Edit message"
+                    tooltip="Edit message"
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </Action>
+                  <CopyButton text={part.text} label="Copy message" />
+                </Actions>
+              )}
+              {conversationId && messageIndex !== undefined && onNavigateToFork && (
+                <ForkNavigation
+                  conversationId={conversationId}
+                  messageIndex={messageIndex}
+                  onNavigate={onNavigateToFork}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Assistant prose runs full width with no bubble: tool cards, code blocks
+    // and tables in the same turn then share one column and one measure.
+    return (
+      <div>
+        <Response className="text-[0.9375rem] leading-7">{part.text}</Response>
+        {index === message.parts.length - 1 && (
+          <Actions className="-ml-2 opacity-0 transition-opacity group-hover/assistant:opacity-100 focus-within:opacity-100">
             <Action
               onClick={() => {
                 regen(message.id)
               }}
-              label="Retry"
+              label="Regenerate response"
+              tooltip="Regenerate"
             >
-              <RefreshCcwIcon className="size-3" />
+              <RefreshCcwIcon className="size-3.5" />
             </Action>
-            <Action
-              onClick={() => {
-                copy(part.text)
-              }}
-              label="Copy"
-            >
-              <CopyIcon className="size-3" />
-            </Action>
+            <CopyButton text={part.text} label="Copy response" />
           </Actions>
-        )}
-        {message.role === 'user' && index === message.parts.length - 1 && (
-          <div className="flex items-center gap-2 mt-1 justify-end">
-            {status !== 'submitted' && status !== 'streaming' && (
-              <Actions className="opacity-0 group-hover/user-message:opacity-100 transition-opacity">
-                <Action
-                  onClick={() => {
-                    onStartEdit?.(message.id)
-                  }}
-                  label="Edit message"
-                >
-                  <PencilIcon className="size-3" />
-                </Action>
-              </Actions>
-            )}
-            {conversationId && messageIndex !== undefined && onNavigateToFork && (
-              <ForkNavigation
-                conversationId={conversationId}
-                messageIndex={messageIndex}
-                onNavigate={onNavigateToFork}
-              />
-            )}
-          </div>
         )}
       </div>
     )
   } else if (part.type === 'reasoning') {
     return (
       <Reasoning
-        className="w-full"
+        className="bg-muted/40 mb-0 w-full rounded-xl border px-3 py-2"
         isStreaming={status === 'streaming' && index === message.parts.length - 1 && lastMessage}
       >
         <ReasoningTrigger />

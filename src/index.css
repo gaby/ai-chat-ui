@@ -44,6 +44,45 @@
   --color-sugar: var(--sugar);
   --color-pydantic-brand: var(--pydantic-brand);
   --text-tiny: 0.625rem;
+  --animate-message-in: message-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-thinking-dot: thinking-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 :root {
@@ -60,7 +99,7 @@
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.967 0.001 286.375);
   --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.956 0.048 115.7);
+  --accent: oklch(0.958 0.024 164.4);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.92 0.004 286.32);
@@ -71,12 +110,12 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sugar: oklch(0.991 0.006 115.7);
+  --sugar: oklch(0.991 0.005 164.4);
   --sidebar: var(--sugar);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.707 0.149 164.4);
   --sidebar-primary-foreground: oklch(0.969 0.015 12.422);
-  --sidebar-accent: oklch(0.956 0.048 115.7);
+  --sidebar-accent: oklch(0.958 0.024 164.4);
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.707 0.149 164.4);
@@ -96,7 +135,7 @@
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.274 0.006 286.033);
   --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.23 0.05 115.7);
+  --accent: oklch(0.262 0.027 164.4);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
@@ -107,12 +146,12 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.707 0.149 164.4);
-  --sugar: oklch(0.18 0.033 115.7);
+  --sugar: oklch(0.176 0.014 164.4);
   --sidebar: var(--sugar);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.707 0.149 164.4);
   --sidebar-primary-foreground: oklch(0.969 0.015 12.422);
-  --sidebar-accent: oklch(0.23 0.05 115.7);
+  --sidebar-accent: oklch(0.262 0.027 164.4);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.707 0.149 164.4);
@@ -126,6 +165,26 @@
 
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 28%, transparent);
+  }
+
+  /* Respect users who ask the OS to tone motion down: keep the UI functional
+     but drop the entrance/loop animations. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   /* Tailwind v4's preflight dropped the UA pointer cursor on `button`, and the
@@ -137,7 +196,15 @@
   }
 }
 
+/* Thin, theme-aware scrollbar. The thumb is derived from the foreground colour
+   so it reads correctly in both themes instead of being pinned to one hue, and
+   it only gains contrast on hover so it stays quiet while reading. */
 @utility custom-scrollbar {
+  & > div {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+  }
+
   & > div::-webkit-scrollbar {
     width: 0.5rem;
   }
@@ -148,12 +215,15 @@
   }
 
   & > div::-webkit-scrollbar-thumb {
-    background: var(--accent);
+    background: color-mix(in oklch, var(--foreground) 18%, transparent);
     border-radius: 100vh;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
   & > div::-webkit-scrollbar-thumb:hover {
-    background: #c0a0b9;
+    background: color-mix(in oklch, var(--foreground) 34%, transparent);
+    background-clip: content-box;
   }
 }
 
