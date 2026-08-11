@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { toolCard } from '../tools'
+import { showActivity, toolCard } from '../tools'
 
 test.describe('tool-call grouping', () => {
   test('collapses repeated same-tool calls into one group, then expands', async ({ page }) => {
@@ -10,6 +10,7 @@ test.describe('tool-call grouping', () => {
     // The group stays expanded while any call is still running, so wait for the
     // run to finish before asserting on the collapsed state.
     await expect(page.getByText('All weather lookups completed.')).toBeVisible()
+    await showActivity(page)
 
     // The three get_weather calls collapse into a single group line showing the
     // tool name and an x3 count; no individual cards are visible yet.

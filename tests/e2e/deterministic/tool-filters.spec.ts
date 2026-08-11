@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { toolCard } from '../tools'
+import { showActivity, toolCard } from '../tools'
 
 test.describe('tool filters', () => {
   test('hides a tool by name and reveals it inline', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'tool', 'What is the weather?')
+    await showActivity(page)
 
     const card = toolCard(page, 'get_weather')
     await expect(card).toBeVisible()

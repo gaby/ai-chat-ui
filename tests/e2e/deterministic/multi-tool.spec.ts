@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { toolCard } from '../tools'
+import { showActivity, toolCard } from '../tools'
 
 test.describe('multi-tool', () => {
   test('shows completed status for both tools', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'multi-tool', 'Do both')
+    await showActivity(page)
     const weatherCard = toolCard(page, 'get_weather')
     const calculateCard = toolCard(page, 'calculate')
     await expect(weatherCard.getByText('Completed')).toBeVisible()
@@ -15,6 +16,7 @@ test.describe('multi-tool', () => {
   test('shows tool results and final text', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'multi-tool', 'Do both')
+    await showActivity(page)
     const weatherCard = toolCard(page, 'get_weather')
     const calculateCard = toolCard(page, 'calculate')
     await expect(weatherCard.getByText('Completed')).toBeVisible()

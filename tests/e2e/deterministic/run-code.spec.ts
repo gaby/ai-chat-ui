@@ -1,17 +1,19 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { toolCard } from '../tools'
+import { showActivity, toolCard } from '../tools'
 
 test.describe('run_code', () => {
   test('shows the run_code tool card', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'run-code', 'Run some code')
+    await showActivity(page)
     await expect(toolCard(page, 'run_code')).toBeVisible()
   })
 
   test('renders the Python code, stdout, and result', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'run-code', 'Run some code')
+    await showActivity(page)
 
     const card = toolCard(page, 'run_code')
     await expect(card.getByText('Completed')).toBeVisible()

@@ -11,6 +11,7 @@ import { ToolCallGroup } from '@/components/tool-call-group'
 import { ToolFiltersDialog } from '@/components/tool-filters-dialog'
 import { UsageSummary } from '@/components/usage-summary'
 import { WelcomeScreen } from '@/components/welcome-screen'
+import { TurnActivity, TurnActivityStep } from '@/components/turn-activity'
 import { ToolFiltersProvider, useToolFilters } from '@/contexts/tool-filters'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
@@ -28,7 +29,7 @@ import type { ThinkingEffort } from '@/lib/generated/thinking-effort.gen'
 import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
 import { readEffort, writeEffort } from '@/lib/effort'
 import { toolNameOfPart } from '@/lib/tool-filters'
-import { COMPLETE_TOOL_STATES, groupParts } from '@/lib/tool-grouping'
+import { COMPLETE_TOOL_STATES, groupParts, type PartRun } from '@/lib/tool-grouping'
 import { getMessages, saveMessages, saveConversation } from '@/lib/chat-db'
 import { stripBasePath } from '@/lib/base-path'
 
@@ -434,7 +435,7 @@ const ChatInner = () => {
     textarea?.setSelectionRange(prompt.length, prompt.length)
   }, [])
 
-  const renderTurn = (message: UIMessage, messageIndex: number) =>
+  const renderTurn = (message: UIMessage, messageIndex: number, isStreaming = false) =>
     renderMessageParts(
       message,
       (part, i) => (
@@ -458,6 +459,7 @@ const ChatInner = () => {
         />
       ),
       isFiltered,
+      isStreaming,
     )
 
   const configBanner = configQuery.isError && (
@@ -570,6 +572,7 @@ const ChatInner = () => {
 
             const sourceParts = message.parts.filter((part) => part.type === 'source-url')
             const isLast = message.id === messages.at(-1)?.id
+            const isStreaming = (status === 'streaming' || status === 'submitted') && isLast
             return (
               <AssistantTurn key={message.id} isStreaming={status === 'streaming' && isLast}>
                 {sourceParts.length > 0 && (
@@ -582,7 +585,7 @@ const ChatInner = () => {
                     ))}
                   </Sources>
                 )}
-                {renderTurn(message, messageIndex)}
+                {renderTurn(message, messageIndex, isStreaming)}
               </AssistantTurn>
             )
           })}
@@ -637,13 +640,14 @@ function renderMessageParts(
   message: UIMessage,
   renderPart: (part: UIMessagePart<UIDataTypes, UITools>, index: number) => ReactNode,
   isFiltered: (toolName: string) => boolean,
+  isStreaming: boolean,
 ): ReactNode[] {
   const descriptors = message.parts.map((part) => {
     const toolName = toolNameOfPart(part)
     return { toolName, filtered: toolName !== null && isFiltered(toolName) }
   })
 
-  return groupParts(descriptors).map((run) => {
+  const renderRun = (run: PartRun): ReactNode => {
     if (run.kind === 'single') {
       return renderPart(message.parts[run.index], run.index)
     }
@@ -666,7 +670,65 @@ function renderMessageParts(
         {run.indices.map((i) => renderPart(message.parts[i], i))}
       </ToolCallGroup>
     )
-  })
+  }
+
+  const output: ReactNode[] = []
+  // Consecutive work — thinking and tool calls — collects into one foldable
+  // block, so a turn reads as "what the agent did" then "what it said" rather
+  // than as a stack of cards the answer has to be scrolled past.
+  let activity: PartRun[] = []
+
+  const flushActivity = () => {
+    if (activity.length === 0) return
+    const runs = activity
+    activity = []
+
+    const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
+    const toolIndices = indices.filter((i) => toolNameOfPart(message.parts[i]) !== null)
+
+    // Thinking with no tool calls is already one folded line of its own.
+    // Wrapping it would stack two rows that say the same thing, one inside the
+    // other.
+    if (toolIndices.length === 0) {
+      output.push(...runs.map(renderRun))
+      return
+    }
+
+    output.push(
+      <TurnActivity
+        key={`activity-${message.id}-${indices[0]}`}
+        toolNames={[...new Set(toolIndices.map((i) => toolNameOfPart(message.parts[i]) ?? ''))]}
+        states={toolIndices.map((i) => partState(message.parts[i]))}
+        hasReasoning={indices.some((i) => message.parts[i].type === 'reasoning')}
+        isStreaming={isStreaming}
+      >
+        {runs.map((run) => (
+          <TurnActivityStep key={`step-${message.id}-${run.kind === 'single' ? run.index : run.indices[0]}`}>
+            {renderRun(run)}
+          </TurnActivityStep>
+        ))}
+      </TurnActivity>,
+    )
+  }
+
+  for (const run of groupParts(descriptors)) {
+    if (run.kind !== 'single' || isActivityPart(message.parts[run.index])) {
+      activity.push(run)
+      continue
+    }
+    flushActivity()
+    output.push(renderRun(run))
+  }
+  flushActivity()
+
+  return output
+}
+
+// What belongs in the activity block: the model's thinking and its tool calls.
+// Prose is the answer and stays out of it; sources render in their own strip
+// above the turn.
+function isActivityPart(part: UIMessagePart<UIDataTypes, UITools>): boolean {
+  return part.type === 'reasoning' || toolNameOfPart(part) !== null
 }
 
 // A tool part's lifecycle state (e.g. `output-available`). Non-tool parts have

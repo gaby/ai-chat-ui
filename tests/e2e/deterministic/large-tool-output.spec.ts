@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { toolCard } from '../tools'
+import { showActivity, toolCard } from '../tools'
 
 test.describe('large tool output', () => {
   test('renders large output via the lightweight pre path', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'large-output', 'Give me a large result')
+    await showActivity(page)
 
     const card = toolCard(page, 'large_output')
     await expect(card.getByText('Completed')).toBeVisible()
