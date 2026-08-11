@@ -75,7 +75,20 @@ export async function getConversations(): Promise<ConversationEntry[]> {
   })
 }
 
-export async function saveConversation(conversation: ConversationEntry): Promise<void> {
+interface SaveConversationOptions {
+  /**
+   * Whether to tell readers the store changed. Off for entries written inside a
+   * batch, which notifies once at the end instead — every event costs each
+   * subscriber a full `getAll()`, so a migration of N conversations otherwise
+   * ran N growing reads.
+   */
+  notify?: boolean
+}
+
+export async function saveConversation(
+  conversation: ConversationEntry,
+  { notify = true }: SaveConversationOptions = {},
+): Promise<void> {
   try {
     const db = await openDatabase()
     await new Promise<void>((resolve, reject) => {
@@ -90,7 +103,7 @@ export async function saveConversation(conversation: ConversationEntry): Promise
         resolve()
       }
     })
-    notifyConversationsChanged()
+    if (notify) notifyConversationsChanged()
   } catch (error) {
     toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
     throw error
@@ -124,7 +137,10 @@ async function touchConversation(conversationId: string, at: number): Promise<vo
     read.onsuccess = () => {
       const existing = read.result as ConversationEntry | undefined
       if (!existing || at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return
-      store.put({ ...existing, timestamp: at })
+      // Freeze the creation time before moving `timestamp` off it. Entries
+      // written before `createdAt` existed have only this one moment left where
+      // the original is still readable, and fork ordering depends on it.
+      store.put({ ...existing, createdAt: existing.createdAt ?? existing.timestamp, timestamp: at })
       wrote = true
     }
     tx.oncomplete = () => {
@@ -239,7 +255,8 @@ export async function migrateFromLocalStorage(): Promise<boolean> {
   const migratedKeys: string[] = []
 
   for (const conv of conversations) {
-    await saveConversation(conv)
+    // One refresh at the end of the batch, not one per entry.
+    await saveConversation(conv, { notify: false })
 
     const messagesJson = localStorage.getItem(conv.id)
     if (messagesJson) {
@@ -257,6 +274,8 @@ export async function migrateFromLocalStorage(): Promise<boolean> {
   }
   localStorage.removeItem('conversationIds')
   localStorage.setItem(migrationKey, 'true')
+
+  if (conversations.length > 0) notifyConversationsChanged()
 
   return true
 }

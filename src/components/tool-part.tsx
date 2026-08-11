@@ -49,7 +49,10 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
 
   const toolName = part.type === 'dynamic-tool' ? part.toolName : part.type.split('-').slice(1).join('-')
   const isRunCode = toolName === 'run_code'
-  const inputText = useMemo(() => stringify(part.input), [part.input])
+  // Only the copy action inside the open card needs this. Serialising it up
+  // front made reopening a conversation walk every tool payload it holds,
+  // including the collapsed ones nobody is looking at.
+  const inputText = useMemo(() => (open ? stringify(part.input) : ''), [open, part.input])
   const hasOutput = part.state === 'output-available' || part.state === 'output-error'
 
   return (
@@ -62,6 +65,12 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
         ACCENT[part.state] ?? 'border-l-transparent',
       )}
     >
+      <ToolPartHeader toolName={toolName} state={part.state} input={part.input} errorText={part.errorText} />
+
+      {/* After the header in the DOM, though it sits at the card's right edge:
+          ahead of it, Tab reached "Hide this tool" before the control that
+          expands the card, so the first key a keyboard user pressed on a tool
+          card made it disappear. */}
       <button
         type="button"
         aria-label="Hide this tool"
@@ -73,8 +82,6 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
       >
         <EyeOffIcon className="size-3.5" />
       </button>
-
-      <ToolPartHeader toolName={toolName} state={part.state} input={part.input} errorText={part.errorText} />
 
       <CollapsibleContent>
         {open && (

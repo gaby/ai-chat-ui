@@ -136,7 +136,11 @@ async def stream_markdown(
     """Markdown exercising the two lazily-loaded renderers: a fenced code block pulls a
     shiki language grammar via dynamic import, and math pulls the KaTeX fonts. The offline
     single-file artifact must render both with no network access."""
-    yield "Fenced code block:\n\n```python\ndef greet():\n    return 'offline'\n```\n\nAnd math:\n\n$$\nE = mc^2\n$$\n"
+    yield (
+        "Fenced code block:\n\n```python\ndef greet():\n    return 'offline'\n```\n\n"
+        "And math:\n\n$$\nE = mc^2\n$$\n\n"
+        "And a [link to the docs](https://ai.pydantic.dev/) with `inline code`.\n"
+    )
 
 
 async def stream_tool(

@@ -139,12 +139,12 @@ export function ChatComposer({
               <TooltipContent>Stop generating</TooltipContent>
             </Tooltip>
           ) : (
-            <PromptInputSubmit
-              disabled={!input.trim()}
-              status={status}
-              aria-label="Send message"
-              className="shrink-0"
-            />
+            // `status` is deliberately not forwarded: the busy states are handled
+            // above, and the only one left that the button reacts to is `error`,
+            // which swaps the paper plane for an X. The failure already has a card
+            // of its own with Retry and Continue on it — a red X on the send
+            // button reads as "cancel", on a control that still sends.
+            <PromptInputSubmit disabled={!input.trim() || !model} aria-label="Send message" className="shrink-0" />
           )}
         </PromptInputToolbar>
       </PromptInput>

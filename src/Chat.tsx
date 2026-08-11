@@ -161,7 +161,15 @@ const ChatInner = () => {
     // metadata with it.
     const leavingId = loadedIdRef.current
     const leavingMessages = messagesRef.current
-    if (leavingId !== null && leavingId !== '/' && leavingMessages.length > 0) {
+    // Same rule the save effect follows: an untouched visit is not a write, and
+    // flushing one here would put the conversation back at the top of the
+    // sidebar for having been read.
+    if (
+      leavingMessages !== loadedMessagesRef.current &&
+      leavingId !== null &&
+      leavingId !== '/' &&
+      leavingMessages.length > 0
+    ) {
       saveMessages(leavingId, leavingMessages).catch((err: unknown) => {
         console.error('Failed to save messages:', err)
       })
@@ -207,6 +215,13 @@ const ChatInner = () => {
     // typed while a tool call is in flight would drop the streaming assistant
     // turn below and fire a second, concurrent request.
     if (status === 'submitted' || status === 'streaming') return
+    // The send button is disabled without a model, but Enter bypasses it. Sending
+    // `model: ''` either fails the request or lets the backend pick something the
+    // user did not choose.
+    if (!model) {
+      toast.error('No model available yet. Check that the backend is configured.')
+      return
+    }
 
     // we're starting a new conversation
     if (stripBasePath(window.location.pathname) === '/') {

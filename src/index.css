@@ -249,6 +249,21 @@
   }
 }
 
+/* MathML carries the LaTeX source alongside the typeset form, for assistive tech
+   and copy-paste. Chrome renders it as literal text, so `$$E = mc^2$$` read as
+   "E=mc2E = mc^2" until it was hidden. */
+math annotation {
+  display: none;
+}
+
+/* `$$…$$` is display math: it belongs on its own line, not tucked inline
+   against whatever text follows it. */
+math[display='block'] {
+  display: block;
+  margin-block: 0.75rem;
+  font-size: 1.1em;
+}
+
 /* for streamdown markdown content, background color should work for both light and dark content */
 .code-bg .bg-muted {
   background: #b0b8c442;

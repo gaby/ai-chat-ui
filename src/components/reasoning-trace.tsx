@@ -1,7 +1,7 @@
 import { CheckIcon } from 'lucide-react'
 import { useMemo } from 'react'
 
-import { Response } from '@/components/ai-elements/response'
+import { Markdown } from '@/components/markdown'
 import { parseReasoningSteps } from '@/lib/reasoning-steps'
 import { cn } from '@/lib/utils'
 
@@ -43,7 +43,7 @@ export function ReasoningTrace({ text, isStreaming }: { text: string; isStreamin
 
             <div className="min-w-0 flex-1 pb-1">
               {step.title && <p className="text-foreground text-sm font-medium">{step.title}</p>}
-              {step.body && <Response className="text-muted-foreground mt-1 text-sm leading-6">{step.body}</Response>}
+              {step.body && <Markdown className="text-muted-foreground mt-1 text-sm leading-6">{step.body}</Markdown>}
             </div>
           </li>
         )

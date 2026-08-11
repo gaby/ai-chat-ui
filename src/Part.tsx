@@ -1,4 +1,4 @@
-import { Response } from '@/components/ai-elements/response'
+import { Markdown } from '@/components/markdown'
 import { CheckIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
 import type { ChatAddToolApproveResponseFunction, UIDataTypes, UIMessagePart, UITools, UIMessage } from 'ai'
 import { useEffect, useState } from 'react'
@@ -105,7 +105,7 @@ export function Part({
       return (
         <div className="py-3">
           <UserBubble>
-            <Response>{part.text}</Response>
+            <Markdown>{part.text}</Markdown>
           </UserBubble>
           {index === message.parts.length - 1 && (
             <div className="mt-1 flex items-center justify-end gap-0.5">
@@ -141,7 +141,7 @@ export function Part({
       <div>
         {/* `h-auto` overrides the vendored Response's `size-full`, which stretched
             inside this flex column and pushed the actions row out of the turn. */}
-        <Response className="h-auto text-[0.9375rem] leading-7">{part.text}</Response>
+        <Markdown className="h-auto text-[0.9375rem] leading-7">{part.text}</Markdown>
         {index === message.parts.length - 1 && (
           <div className="mt-1 flex items-center gap-0.5">
             <CopyButton text={part.text} label="Copy response" />
