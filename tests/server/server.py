@@ -284,6 +284,9 @@ async def stream_repeated_approval(
 
 models: dict[str, object] = {
     "text": FunctionModel(stream_function=stream_text),
+    # Same reply as `text`; the difference is on the wire, where its usage
+    # metadata carries a total and no breakdown.
+    "total-only-usage": FunctionModel(stream_function=stream_text),
     "markdown": FunctionModel(stream_function=stream_markdown),
     "slow": FunctionModel(stream_function=stream_slow),
     "failure": FunctionModel(stream_function=stream_failure),
@@ -331,12 +334,18 @@ class UsageEventStream(VercelAIEventStream):
     the browser. Keys are camelCase to match the rest of the wire format.
     """
 
+    #: Report only `totalTokens`, the minimum the UI accepts. The breakdown is
+    #: optional in this shape, and a backend that omits it used to make the
+    #: per-reply chip read "0 in, 0 out" on a reply that cost real tokens.
+    total_only = False
+
     async def handle_run_result(self, event):  # type: ignore[override]
         usage = event.result.usage
         response = event.result.response
-        response.metadata = {
-            **(response.metadata or {}),
-            "usage": {
+        reported = (
+            {"totalTokens": usage.total_tokens}
+            if self.total_only
+            else {
                 "inputTokens": usage.input_tokens,
                 "outputTokens": usage.output_tokens,
                 "totalTokens": usage.total_tokens,
@@ -344,20 +353,27 @@ class UsageEventStream(VercelAIEventStream):
                 "cacheWriteTokens": usage.cache_write_tokens,
                 "requests": usage.requests,
                 "toolCalls": usage.tool_calls,
-            },
-        }
+            }
+        )
+        response.metadata = {**(response.metadata or {}), "usage": reported}
         async for chunk in super().handle_run_result(event):
             yield chunk
 
 
 class UsageAdapter(VercelAIAdapter):
     def build_event_stream(self):  # type: ignore[override]
-        return UsageEventStream(
+        stream = UsageEventStream(
             self.run_input,
             accept=self.accept,
             sdk_version=self.sdk_version,
             server_message_id=self.server_message_id,
         )
+        extra = self.run_input.__pydantic_extra__ or {}
+        # The client sends the qualified id (`function:function::<name>`), which
+        # `chat()` splits the same way to look the model up.
+        model_id = extra.get("model") or ""
+        stream.total_only = model_id.split("::")[-1] == "total-only-usage"
+        return stream
 
 
 async def chat(request: Request) -> Response:

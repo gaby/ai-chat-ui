@@ -12,6 +12,17 @@ export function MessageUsage({ message }: { message: UIMessage }) {
   const reported = parseUsage(message.metadata)
   if (!reported) return null
 
+  // A backend may report only a total — the split is optional in the shape this
+  // reads. Showing the breakdown then meant "↑ 0 ↓ 0" on a reply that cost 42
+  // tokens, so the total stands in for it.
+  if (reported.inputTokens === 0 && reported.outputTokens === 0) {
+    return (
+      <span className="text-muted-foreground px-2 text-xs tabular-nums" title="Total tokens for this reply">
+        {formatTokens(reported.totalTokens)} tokens
+      </span>
+    )
+  }
+
   return (
     <span
       className="text-muted-foreground flex items-center gap-2 px-2 text-xs tabular-nums"

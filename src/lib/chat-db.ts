@@ -171,7 +171,6 @@ async function touchConversation(conversationId: string, at: number): Promise<vo
 const deletedConversations = new Set<string>()
 
 export async function deleteConversation(conversationId: string): Promise<void> {
-  deletedConversations.add(conversationId)
   const db = await openDatabase()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
@@ -183,6 +182,11 @@ export async function deleteConversation(conversationId: string): Promise<void> 
     msgStore.delete(conversationId)
 
     tx.oncomplete = () => {
+      // Recorded on success only, and before this promise resolves — the caller
+      // navigates in its `.then`, and it is that navigation's flush the
+      // tombstone has to beat. Setting it up front would leave a conversation
+      // that failed to delete silently unwritable for the rest of the session.
+      deletedConversations.add(conversationId)
       notifyConversationsChanged()
       resolve()
     }

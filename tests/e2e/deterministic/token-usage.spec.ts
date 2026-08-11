@@ -58,4 +58,17 @@ test.describe('token usage', () => {
     await page.getByText('Hello from the test server').hover()
     await expect(page.getByTitle(/input, .* output/)).toBeVisible()
   })
+
+  test('falls back to the total when a backend reports no breakdown', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'total-only-usage', 'Report only a total')
+    await expect(page.getByText('Hello from the test server')).toBeVisible()
+
+    // `totalTokens` alone is a supported shape. Rendering the breakdown anyway
+    // put "0 in, 0 out" on a reply that cost real tokens.
+    await page.getByText('Hello from the test server').hover()
+    await expect(page.getByTitle('Total tokens for this reply')).toBeVisible()
+    await expect(page.getByTitle('Total tokens for this reply')).not.toContainText(/^0 /)
+    await expect(page.getByTitle(/input, .* output/)).toHaveCount(0)
+  })
 })
