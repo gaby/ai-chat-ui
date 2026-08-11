@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { getConversations } from '@/lib/chat-db'
 import type { ConversationEntry } from '@/types'
@@ -17,40 +17,62 @@ export interface ConversationsState {
   loaded: boolean
 }
 
-export function useConversationsState(): ConversationsState {
-  const [state, setState] = useState<ConversationsState>({ conversations: [], loaded: false })
+/**
+ * One read shared by every consumer.
+ *
+ * A `ForkNavigation` is mounted under each user turn, so a hook that opened its
+ * own subscription meant one full `getAll()` per turn on every change event —
+ * and an active run emits one every 30 seconds. A long conversation turned each
+ * of those into dozens of reads and dozens of renders.
+ */
+let state: ConversationsState = { conversations: [], loaded: false }
+const listeners = new Set<() => void>()
 
-  useEffect(() => {
-    // Reads triggered by two writes in quick succession can resolve out of
-    // order; only the newest one is allowed to win, so a deleted conversation
-    // cannot reappear from an older in-flight snapshot.
-    let latest = 0
-    let cancelled = false
+// Reads triggered by two writes in quick succession can resolve out of order;
+// only the newest is allowed to win, so a deleted conversation cannot reappear
+// from an older in-flight snapshot.
+let latest = 0
 
-    const loadConversations = () => {
-      const request = ++latest
-      getConversations()
-        .then((conversations) => {
-          if (!cancelled && request === latest) setState({ conversations, loaded: true })
-        })
-        .catch((err: unknown) => {
-          console.error('Failed to load conversations:', err)
-          // Still "loaded": the read is over, and leaving it pending would hold
-          // every caller in its loading state for good.
-          if (!cancelled && request === latest) setState({ conversations: [], loaded: true })
-        })
+function refresh(): void {
+  const request = ++latest
+  getConversations()
+    .then((conversations) => {
+      if (request !== latest) return
+      state = { conversations, loaded: true }
+      for (const listener of listeners) listener()
+    })
+    .catch((err: unknown) => {
+      console.error('Failed to load conversations:', err)
+      if (request !== latest || state.loaded) return
+      // Marked loaded so nothing waits forever, but the last good list is kept:
+      // a failed refresh must not empty the sidebar and blank the header title.
+      state = { conversations: state.conversations, loaded: true }
+      for (const listener of listeners) listener()
+    })
+}
+
+function subscribe(listener: () => void): () => void {
+  if (listeners.size === 0) {
+    window.addEventListener('conversations-changed', refresh)
+  }
+  listeners.add(listener)
+  // First mount reads; later ones join the list already in memory.
+  if (!state.loaded) refresh()
+
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) {
+      window.removeEventListener('conversations-changed', refresh)
     }
+  }
+}
 
-    loadConversations()
-    window.addEventListener('conversations-changed', loadConversations)
-
-    return () => {
-      cancelled = true
-      window.removeEventListener('conversations-changed', loadConversations)
-    }
-  }, [])
-
+function getSnapshot(): ConversationsState {
   return state
+}
+
+export function useConversationsState(): ConversationsState {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 /** The list alone, for callers that have nothing to show while it loads. */

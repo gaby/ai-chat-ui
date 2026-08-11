@@ -112,6 +112,50 @@ export async function saveConversation(
   }
 }
 
+/**
+ * Apply a partial change to a stored conversation.
+ *
+ * Read and write happen in one `readwrite` transaction, so the change lands on
+ * whatever is in the store rather than on a snapshot the caller read earlier.
+ * Writing the whole entry back instead — the sidebar holds a list that is a
+ * render behind — restored the old `timestamp` when a rename or a pin raced the
+ * activity stamp of a run, dropping an active conversation back down the list.
+ */
+export async function patchConversation(
+  conversationId: string,
+  patch: Partial<Omit<ConversationEntry, 'id'>>,
+): Promise<void> {
+  if (deletedConversations.has(conversationId)) return
+
+  try {
+    const db = await openDatabase()
+    const patched = await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+      const store = tx.objectStore(CONVERSATIONS_STORE)
+      const read = store.get(conversationId)
+      let wrote = false
+
+      read.onsuccess = () => {
+        const existing = read.result as ConversationEntry | undefined
+        if (!existing) return
+        store.put({ ...existing, ...patch })
+        wrote = true
+      }
+      tx.oncomplete = () => {
+        resolve(wrote)
+      }
+      tx.onerror = () => {
+        reject(new Error(tx.error?.message ?? 'Failed to update conversation'))
+      }
+    })
+
+    if (patched) notifyConversationsChanged()
+  } catch (error) {
+    toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
+    throw error
+  }
+}
+
 // Below this, a rewrite would not change what any reader displays, so the churn
 // (an IDB write plus a re-read in every subscriber) is not worth it.
 const ACTIVITY_RESOLUTION_MS = 30_000

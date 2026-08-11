@@ -29,7 +29,7 @@ import {
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
 import { useConversations } from '@/hooks/useConversations'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
-import { deleteConversation as deleteConv, saveConversation } from '@/lib/chat-db'
+import { deleteConversation as deleteConv, patchConversation } from '@/lib/chat-db'
 import { conversationTitle } from '@/lib/conversation-title'
 import type { ConversationEntry } from '@/types'
 import logoSvg from '../assets/logo.svg'
@@ -61,10 +61,6 @@ function deleteConversation(conversationId: string) {
       window.dispatchEvent(new Event('history-state-changed'))
     }
   })
-}
-
-function updateConversation(conversation: ConversationEntry, patch: Partial<ConversationEntry>) {
-  return saveConversation({ ...conversation, ...patch })
 }
 
 export function AppSidebar() {
@@ -106,21 +102,19 @@ export function AppSidebar() {
   }
 
   const handleTogglePin = (conversation: ConversationEntry) => {
-    updateConversation(conversation, { pinned: !conversation.pinned }).catch((err: unknown) => {
+    patchConversation(conversation.id, { pinned: !conversation.pinned }).catch((err: unknown) => {
       console.error('Failed to pin conversation:', err)
     })
   }
 
   const handleRenameSubmit = (title: string) => {
     if (!conversationToRename) return
-    // Re-read the entry rather than writing back the copy captured when the
-    // menu opened: the dialog can stay open across a `conversations-changed`
-    // (an active run bumps the timestamp), and the stale copy would put the
-    // conversation back where it was in the list.
+    // Only the title travels. Writing the whole entry back would carry the
+    // snapshot taken when the menu opened, and the dialog can sit open across
+    // an activity stamp — which would then be undone.
     const id = conversationToRename.id
-    const conversation = conversations.find((entry) => entry.id === id) ?? conversationToRename
     setConversationToRename(null)
-    updateConversation(conversation, { title }).catch((err: unknown) => {
+    patchConversation(id, { title }).catch((err: unknown) => {
       console.error('Failed to rename conversation:', err)
       toast.error('Failed to rename chat')
     })
