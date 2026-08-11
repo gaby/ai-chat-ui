@@ -40,6 +40,8 @@ interface ChatComposerProps {
   onToggleTool: (id: string) => void
   onOpenFilters: () => void
   hiddenToolCount: number
+  /** True while /api/configure is in flight; false once it lands or fails. */
+  isLoadingModels: boolean
   /** Hidden on the welcome screen, where the suggestion chips sit in this spot. */
   showHint?: boolean
 }
@@ -65,6 +67,7 @@ export function ChatComposer({
   onToggleTool,
   onOpenFilters,
   hiddenToolCount,
+  isLoadingModels,
   showHint = true,
 }: ChatComposerProps) {
   const isBusy = status === 'submitted' || status === 'streaming'
@@ -122,6 +125,7 @@ export function ChatComposer({
                         <span className="text-sm">{tool.name}</span>
                       </div>
                       <Switch
+                        aria-label={tool.name}
                         checked={enabledTools.includes(tool.id)}
                         onCheckedChange={() => {
                           onToggleTool(tool.id)
@@ -161,7 +165,7 @@ export function ChatComposer({
 
             {/* Hold the model select's footprint while /api/configure is in
                 flight, so the toolbar does not jump once it lands. */}
-            {(models.length === 0 || !model) && <Skeleton className="h-8 w-24 rounded-lg" />}
+            {isLoadingModels && <Skeleton className="h-8 w-24 rounded-lg" />}
 
             {models.length > 0 && model && (
               <PromptInputModelSelect onValueChange={onModelChange} value={model}>

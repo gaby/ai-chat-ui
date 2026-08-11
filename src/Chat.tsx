@@ -3,6 +3,7 @@ import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai
 import { AssistantTurn } from '@/components/assistant-turn'
 import { ChatComposer } from '@/components/chat-composer'
 import { ChatError } from '@/components/chat-error'
+import { ConfigErrorBanner } from '@/components/config-error-banner'
 import { EditMessageDialog } from '@/components/edit-message-dialog'
 import { HiddenToolsGroup } from '@/components/hidden-tools-group'
 import { ThinkingIndicator } from '@/components/thinking-indicator'
@@ -322,6 +323,17 @@ const ChatInner = () => {
       isFiltered,
     )
 
+  const configBanner = configQuery.isError && (
+    <ConfigErrorBanner
+      isRetrying={configQuery.isFetching}
+      onRetry={() => {
+        configQuery.refetch().catch((error: unknown) => {
+          console.error('Error reloading configuration:', error)
+        })
+      }}
+    />
+  )
+
   const renderComposer = (showHint: boolean) => (
     <ChatComposer
       showHint={showHint}
@@ -350,6 +362,7 @@ const ChatInner = () => {
         setFiltersDialogOpen(true)
       }}
       hiddenToolCount={filters.length}
+      isLoadingModels={configQuery.isPending}
     />
   )
 
@@ -374,7 +387,15 @@ const ChatInner = () => {
     return (
       <>
         <div className="flex flex-1 items-center justify-center overflow-y-auto px-3 py-8">
-          <WelcomeScreen onSelect={handleSuggestion} composer={renderComposer(false)} />
+          <WelcomeScreen
+            onSelect={handleSuggestion}
+            composer={
+              <>
+                {configBanner}
+                {renderComposer(false)}
+              </>
+            }
+          />
         </div>
         {dialogs}
       </>
@@ -429,7 +450,10 @@ const ChatInner = () => {
       {/* The fade keeps text from colliding with the composer as it scrolls
           under the sticky footer. */}
       <div className="from-background pointer-events-none sticky bottom-0 h-6 bg-gradient-to-t to-transparent" />
-      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">{renderComposer(true)}</div>
+      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">
+        {configBanner}
+        {renderComposer(true)}
+      </div>
 
       {dialogs}
     </>

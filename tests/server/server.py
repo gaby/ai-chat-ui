@@ -244,12 +244,22 @@ models: dict[str, object] = {
 SDK_VERSION: Literal[5, 6] = 6
 
 
+# Builtin tools are advertised per model. Only `text` declares one, so specs
+# that select another model keep the plain toolbar.
+BUILTIN_TOOLS = [{"id": "web_search", "name": "Web search"}]
+MODELS_WITH_BUILTIN_TOOLS = {"text"}
+
+
 async def configure(request: Request) -> Response:
     model_list = [
-        {"id": f"function:function::{name}", "name": name, "builtinTools": []}
+        {
+            "id": f"function:function::{name}",
+            "name": name,
+            "builtinTools": [t["id"] for t in BUILTIN_TOOLS] if name in MODELS_WITH_BUILTIN_TOOLS else [],
+        }
         for name in models
     ]
-    return JSONResponse({"models": model_list, "builtinTools": []})
+    return JSONResponse({"models": model_list, "builtinTools": BUILTIN_TOOLS})
 
 
 async def chat(request: Request) -> Response:
