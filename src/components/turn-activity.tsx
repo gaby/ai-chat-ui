@@ -76,6 +76,9 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
     // which is after both of those are already known.
     if (userToggled.current || held) return
     const timer = setTimeout(() => {
+      // Checked again, not just before scheduling: a second is long enough for
+      // someone to open it in the meantime, and this would shut it under them.
+      if (userToggled.current) return
       setOpen(false)
     }, AUTO_COLLAPSE_DELAY)
     return () => {

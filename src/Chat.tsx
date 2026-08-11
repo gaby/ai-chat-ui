@@ -160,6 +160,14 @@ const ChatInner = () => {
     setEditingMessageId(null)
     setLoadFailed(false)
 
+    // A deferred send belongs to one conversation. Leaving before its history
+    // arrives abandons it: left in place it suppresses the welcome screen on
+    // whatever empty chat comes next, and would fire the old prompt if its
+    // target were ever reopened.
+    if (pendingSendRef.current && pendingSendRef.current.conversationId !== conversationId) {
+      pendingSendRef.current = null
+    }
+
     // The conversation this session just created: the messages already in
     // memory are its own, and a run is streaming into it. Neither clear nor
     // stop applies.
@@ -753,6 +761,11 @@ function renderMessageParts(
   }
 
   for (const run of groupParts(descriptors)) {
+    // `step-start` marks the boundary between the model's steps. `Part` renders
+    // nothing for it, but treating it as content split a multi-step tool loop
+    // across several foldable blocks — the exact shape the single block exists
+    // to collect.
+    if (run.kind === 'single' && message.parts[run.index].type === 'step-start') continue
     if (run.kind !== 'single' || isActivityPart(message.parts[run.index])) {
       activity.push(run)
       continue

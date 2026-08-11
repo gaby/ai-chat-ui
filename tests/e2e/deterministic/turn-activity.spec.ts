@@ -19,6 +19,22 @@ test.describe('turn activity', () => {
     await expect(toolCard(page, 'calculate')).toBeVisible()
   })
 
+  test('keeps a multi-step tool loop in one block', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'two-step', 'Look it up, then work it out')
+    await expect(page.getByText('Both steps are done.')).toBeVisible()
+
+    // Each round is its own model step, and the SDK marks the boundary with a
+    // `step-start` part. Treated as content it split the loop across a block
+    // per step — the very stacking the single block exists to prevent.
+    await expect(page.getByTestId('turn-activity')).toHaveCount(1)
+    await expect(page.getByTestId('turn-activity')).toContainText('get_weather, calculate')
+
+    await showActivity(page)
+    await expect(toolCard(page, 'get_weather')).toBeVisible()
+    await expect(toolCard(page, 'calculate')).toBeVisible()
+  })
+
   test('holds itself open while an approval is pending', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'approval', 'Send an email')

@@ -168,6 +168,24 @@ async def stream_multi_tool(
     }
 
 
+async def stream_two_step(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """A genuine tool loop: one call, then a second that depends on it, then the answer.
+
+    Each round is its own model step, so the SDK puts a `step-start` part between
+    the tool calls — which is what the turn-activity grouping has to see through
+    to keep the whole loop in one foldable block.
+    """
+    returns = [p for msg in messages for p in msg.parts if isinstance(p, ToolReturnPart)]
+    if not returns:
+        yield {0: DeltaToolCall(name="get_weather", json_args=json.dumps({"city": "London"}))}
+    elif len(returns) == 1:
+        yield {0: DeltaToolCall(name="calculate", json_args=json.dumps({"expression": "2 + 2"}))}
+    else:
+        yield "Both steps are done."
+
+
 async def stream_repeated_tool(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -297,6 +315,7 @@ models: dict[str, object] = {
     "reasoning": FunctionModel(stream_function=stream_reasoning),
     "tool": FunctionModel(stream_function=stream_tool),
     "multi-tool": FunctionModel(stream_function=stream_multi_tool),
+    "two-step": FunctionModel(stream_function=stream_two_step),
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),
     "error": FunctionModel(stream_function=stream_error),
     "approval": FunctionModel(stream_function=stream_approval),
