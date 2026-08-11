@@ -54,10 +54,19 @@ const MATHML_TAGS = [
 ]
 
 // Layout attributes MathML reads. `class`/`style` are deliberately absent.
+//
+// Everything KaTeX emits has to be here or the sanitiser drops it: `mtable`
+// carries the column spacing for matrices and aligned equations, and `menclose`
+// carries the box `\boxed` draws. Enumerated by rendering a spread of TeX
+// through KaTeX and diffing the attributes against this list, rather than
+// guessed.
 const MATHML_ATTRIBUTES = [
   'accent',
   'accentunder',
   'columnalign',
+  'columnspacing',
+  'notation',
+  'xmlns',
   'depth',
   'display',
   'displaystyle',

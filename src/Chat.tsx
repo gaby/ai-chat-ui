@@ -4,6 +4,7 @@ import { AssistantTurn } from '@/components/assistant-turn'
 import { ChatComposer } from '@/components/chat-composer'
 import { ChatError } from '@/components/chat-error'
 import { ConfigErrorBanner } from '@/components/config-error-banner'
+import { ConversationLoadError } from '@/components/conversation-load-error'
 import { EditMessageDialog } from '@/components/edit-message-dialog'
 import { HiddenToolsGroup } from '@/components/hidden-tools-group'
 import { ThinkingIndicator } from '@/components/thinking-indicator'
@@ -119,6 +120,9 @@ const ChatInner = () => {
     conversationId: string
   } | null>(null)
   const [sendTrigger, setSendTrigger] = useState(0)
+  // Bumped by the retry button to re-run the load effect.
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const configQuery = useQuery({
     queryFn: getModels,
@@ -154,6 +158,7 @@ const ChatInner = () => {
     let superseded = false
 
     setEditingMessageId(null)
+    setLoadFailed(false)
 
     // The conversation this session just created: the messages already in
     // memory are its own, and a run is streaming into it. Neither clear nor
@@ -214,11 +219,12 @@ const ChatInner = () => {
         .catch((err: unknown) => {
           if (superseded) return
           console.error('Failed to load messages:', err)
-          toast.error('Failed to load this conversation from browser storage.')
-          // Mark it loaded anyway. Leaving it `null` looks harmless but leaves
-          // the save effect permanently disarmed, so everything sent from here
-          // on would be discarded on reload without a further word to the user.
-          setLoadedConversationId(conversationId)
+          // Deliberately left unloaded. Marking it loaded would arm the save
+          // effect against an empty `messages`, so the next reply would be
+          // written over the history that merely failed to *read* — a transient
+          // storage error turned into permanent data loss. Unloaded, the
+          // composer refuses to send and the banner offers a retry instead.
+          setLoadFailed(true)
         })
     }
     textareaRef.current?.focus()
@@ -226,7 +232,7 @@ const ChatInner = () => {
     return () => {
       superseded = true
     }
-  }, [conversationId])
+  }, [conversationId, loadAttempt])
 
   const handleSubmit = (e: SyntheticEvent) => {
     e.preventDefault()
@@ -478,6 +484,16 @@ const ChatInner = () => {
       isStreaming,
     )
 
+  const loadErrorBanner = loadFailed && (
+    <div className="mx-auto w-full max-w-3xl px-4">
+      <ConversationLoadError
+        onRetry={() => {
+          setLoadAttempt((n) => n + 1)
+        }}
+      />
+    </div>
+  )
+
   const configBanner = configQuery.isError && (
     <div className="mx-auto w-full max-w-3xl px-4">
       <ConfigErrorBanner
@@ -493,6 +509,7 @@ const ChatInner = () => {
 
   const renderComposer = (showHint: boolean) => (
     <ChatComposer
+      canSend={loadedConversationId === conversationId}
       showHint={showHint}
       usage={<UsageSummary messages={messages} />}
       input={input}
@@ -632,6 +649,7 @@ const ChatInner = () => {
           `px-4` inside their own `max-w-3xl` box that `ConversationContent` does,
           which is what puts all three on the same edges. */}
       <div className="bg-background sticky bottom-0 pt-1 pb-3">
+        {loadErrorBanner}
         {configBanner}
         {renderComposer(true)}
       </div>

@@ -139,6 +139,10 @@ async def stream_markdown(
     yield (
         "Fenced code block:\n\n```python\ndef greet():\n    return 'offline'\n```\n\n"
         "And math:\n\n$$\nE = mc^2\n$$\n\n"
+        # Aligned equations and matrices are the MathML layout attributes the
+        # sanitiser has to let through; a plain `E = mc^2` needs none of them.
+        "$$\n\\begin{aligned}\na &= b + c \\\\\nd &= e - f\n\\end{aligned}\n$$\n\n"
+        "$$\n\\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \\end{pmatrix}\n$$\n\n"
         "And a [link to the docs](https://ai.pydantic.dev/) with `inline code`.\n"
     )
 

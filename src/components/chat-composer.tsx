@@ -45,6 +45,11 @@ interface ChatComposerProps {
   usage?: ReactNode
   /** Hidden on the welcome screen, where the suggestion chips sit in this spot. */
   showHint?: boolean
+  /**
+   * False while the conversation's history has not arrived. Sending then would
+   * go out without it, and the reply would be saved over what failed to load.
+   */
+  canSend?: boolean
 }
 
 /**
@@ -71,6 +76,7 @@ export function ChatComposer({
   isLoadingModels,
   usage,
   showHint = true,
+  canSend = true,
 }: ChatComposerProps) {
   const isBusy = status === 'submitted' || status === 'streaming'
 
@@ -148,7 +154,11 @@ export function ChatComposer({
             // which swaps the paper plane for an X. The failure already has a card
             // of its own with Retry and Continue on it — a red X on the send
             // button reads as "cancel", on a control that still sends.
-            <PromptInputSubmit disabled={!input.trim() || !model} aria-label="Send message" className="shrink-0" />
+            <PromptInputSubmit
+              disabled={!input.trim() || !model || !canSend}
+              aria-label="Send message"
+              className="shrink-0"
+            />
           )}
         </PromptInputToolbar>
       </PromptInput>
