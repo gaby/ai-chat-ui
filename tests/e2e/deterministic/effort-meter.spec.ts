@@ -1,28 +1,27 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
 
-test.describe('effort selector', () => {
-  test('shows effort options in the dropdown', async ({ page }) => {
+test.describe('effort meter', () => {
+  test('shows every effort level with what it means', async ({ page }) => {
     await page.goto('/')
-    await page
-      .getByRole('combobox')
-      .filter({ hasText: /^Effort:/ })
-      .click()
-    await expect(page.getByRole('option', { name: 'Effort: Minimal' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Effort: Low' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Effort: Medium' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Effort: High' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Effort: X-High' })).toBeVisible()
+    await page.getByRole('button', { name: /Thinking effort/ }).click()
+
+    await expect(page.getByRole('radio', { name: /Minimal/ })).toBeVisible()
+    await expect(page.getByRole('radio', { name: /Low/ })).toBeVisible()
+    await expect(page.getByRole('radio', { name: /Medium/ })).toBeVisible()
+    await expect(page.getByRole('radio', { name: /High/, exact: false }).first()).toBeVisible()
+    await expect(page.getByRole('radio', { name: /X-High/ })).toBeVisible()
+
+    // The level is described, not just named.
+    await expect(page.getByText('Take as long as it needs')).toBeVisible()
   })
 
   test('selected effort level is sent in the request body', async ({ page }) => {
     await page.goto('/')
 
-    await page
-      .getByRole('combobox')
-      .filter({ hasText: /^Effort:/ })
-      .click()
-    await page.getByRole('option', { name: 'Effort: High' }).click()
+    await page.getByRole('button', { name: /Thinking effort/ }).click()
+    await page.getByRole('radio', { name: /^High/ }).click()
+    await expect(page.getByRole('button', { name: 'Thinking effort: High' })).toBeVisible()
 
     const requestPromise = page.waitForRequest('**/api/chat')
     await sendMessage(page, 'text', 'hello effort')
@@ -37,6 +36,7 @@ test.describe('effort selector', () => {
 
   test('default effort is medium and is sent in the request body', async ({ page }) => {
     await page.goto('/')
+    await expect(page.getByRole('button', { name: 'Thinking effort: Medium' })).toBeVisible()
 
     const requestPromise = page.waitForRequest('**/api/chat')
     await sendMessage(page, 'text', 'hello default effort')

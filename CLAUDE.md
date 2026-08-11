@@ -108,6 +108,16 @@ The shell is composed as sidebar → `AppHeader` → conversation → `ChatCompo
   - Accepts `model` and `builtinTools` in request body extra data
   - Streams responses using SSE
 
+**Token usage:**
+
+The UI shows per-reply and per-conversation token counts, read from `UIMessage.metadata.usage` on assistant messages:
+
+```json
+{ "usage": { "inputTokens": 120, "outputTokens": 30, "totalTokens": 150, "requests": 1, "toolCalls": 0 } }
+```
+
+`snake_case` keys are accepted too. A backend puts them there by writing `ModelResponse.metadata` before the adapter emits its `message-metadata` chunk — see `UsageEventStream` in `tests/server/server.py` for a working ~20-line implementation. `Agent.to_web()` does not report usage today (it hardcodes `VercelAIAdapter` with no seam), so agents served that way fall back to a locally-derived estimate, which the UI labels with `~`.
+
 **Builtin Tools:**
 
 - `web_search`, `code_execution`, `image_generation`

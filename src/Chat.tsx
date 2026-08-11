@@ -9,6 +9,7 @@ import { HiddenToolsGroup } from '@/components/hidden-tools-group'
 import { ThinkingIndicator } from '@/components/thinking-indicator'
 import { ToolCallGroup } from '@/components/tool-call-group'
 import { ToolFiltersDialog } from '@/components/tool-filters-dialog'
+import { UsageSummary } from '@/components/usage-summary'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ToolFiltersProvider, useToolFilters } from '@/contexts/tool-filters'
 import { useChat } from '@ai-sdk/react'
@@ -337,6 +338,7 @@ const ChatInner = () => {
   const renderComposer = (showHint: boolean) => (
     <ChatComposer
       showHint={showHint}
+      usage={<UsageSummary messages={messages} />}
       input={input}
       onInputChange={setInput}
       onSubmit={handleSubmit}

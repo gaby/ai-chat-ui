@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useForkSiblings } from '@/hooks/useForkSiblings'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { CopyButton } from '@/components/copy-button'
+import { MessageUsage } from '@/components/message-usage'
 import { ToolPart } from '@/components/tool-part'
 import { UserBubble } from '@/components/user-bubble'
 
@@ -154,6 +155,7 @@ export function Part({
               <RefreshCcwIcon className="size-3.5" />
             </Action>
             <CopyButton text={part.text} label="Copy response" />
+            <MessageUsage message={message} />
           </Actions>
         )}
       </div>

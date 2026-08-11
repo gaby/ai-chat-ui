@@ -10,7 +10,7 @@ test.describe('reasoning', () => {
 
     // The reasoning block folds itself away shortly after the run ends so the
     // answer is what is left on screen; the summary line stays as the way back in.
-    const trigger = page.getByRole('button', { name: /Thought for|Thinking/ })
+    const trigger = page.getByRole('button', { name: /Thought for|Thinking\.\.\./ })
     await expect(trigger).toBeVisible()
     await expect(page.getByText('Working through the question')).toBeHidden()
 

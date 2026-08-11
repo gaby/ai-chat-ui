@@ -1,6 +1,6 @@
 import type { ChatStatus } from 'ai'
-import { FilterIcon, SlidersHorizontalIcon, SquareIcon, XIcon } from 'lucide-react'
-import type { RefObject, SyntheticEvent } from 'react'
+import { FilterIcon, SquareIcon } from 'lucide-react'
+import type { ReactNode, RefObject, SyntheticEvent } from 'react'
 
 import {
   PromptInput,
@@ -15,12 +15,10 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input'
-import { EffortSelect } from '@/components/effort-select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { EffortMeter } from '@/components/effort-meter'
+import { ToolToggleBar } from '@/components/tool-toggle-bar'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { getToolIcon } from '@/lib/tool-icons'
 import type { BuiltinTool, ModelConfig } from '@/types'
 
 interface ChatComposerProps {
@@ -42,6 +40,8 @@ interface ChatComposerProps {
   hiddenToolCount: number
   /** True while /api/configure is in flight; false once it lands or fails. */
   isLoadingModels: boolean
+  /** Token usage for the conversation, shown alongside the keyboard hint. */
+  usage?: ReactNode
   /** Hidden on the welcome screen, where the suggestion chips sit in this spot. */
   showHint?: boolean
 }
@@ -68,6 +68,7 @@ export function ChatComposer({
   onOpenFilters,
   hiddenToolCount,
   isLoadingModels,
+  usage,
   showHint = true,
 }: ChatComposerProps) {
   const isBusy = status === 'submitted' || status === 'streaming'
@@ -98,70 +99,7 @@ export function ChatComposer({
               <TooltipContent>Hidden tools</TooltipContent>
             </Tooltip>
 
-            {availableTools.length > 0 && (
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <PromptInputButton variant="ghost" aria-label="Tools">
-                        <SlidersHorizontalIcon className="size-4" />
-                      </PromptInputButton>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Tools</TooltipContent>
-                </Tooltip>
-                <DropdownMenuContent align="start" className="w-60">
-                  <p className="text-muted-foreground px-2 py-1.5 text-xs font-medium">Builtin tools</p>
-                  {availableTools.map((tool) => (
-                    <div
-                      key={tool.id}
-                      className="hover:bg-accent flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5"
-                      onClick={() => {
-                        onToggleTool(tool.id)
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        {getToolIcon(tool.id)}
-                        <span className="text-sm">{tool.name}</span>
-                      </div>
-                      <Switch
-                        aria-label={tool.name}
-                        checked={enabledTools.includes(tool.id)}
-                        onCheckedChange={() => {
-                          onToggleTool(tool.id)
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                        }}
-                      />
-                    </div>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {/* Active tools read as pills rather than a count behind a menu:
-                what the next message will run with should be visible without
-                opening anything. */}
-            {enabledTools.map((id) => {
-              const tool = availableTools.find((entry) => entry.id === id)
-              if (!tool) return null
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => {
-                    onToggleTool(id)
-                  }}
-                  aria-label={`Turn off ${tool.name}`}
-                  className="border-primary/30 bg-primary/10 text-foreground hover:bg-primary/15 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm"
-                >
-                  {getToolIcon(tool.id, 'size-3.5 text-primary')}
-                  <span className="max-w-28 truncate">{tool.name}</span>
-                  <XIcon className="text-muted-foreground size-3" />
-                </button>
-              )
-            })}
+            <ToolToggleBar tools={availableTools} enabled={enabledTools} onToggle={onToggleTool} />
 
             {/* Hold the model select's footprint while /api/configure is in
                 flight, so the toolbar does not jump once it lands. */}
@@ -182,7 +120,7 @@ export function ChatComposer({
               </PromptInputModelSelect>
             )}
 
-            <EffortSelect value={effort} onValueChange={onEffortChange} />
+            <EffortMeter value={effort} onValueChange={onEffortChange} />
           </PromptInputTools>
 
           {/* While a run is in flight the submit button is disabled (there is no
@@ -203,12 +141,20 @@ export function ChatComposer({
         </PromptInputToolbar>
       </PromptInput>
 
-      {showHint && (
-        <p className="text-muted-foreground mt-2 hidden text-center text-xs sm:block">
-          <kbd className="font-sans">Enter</kbd> to send &middot; <kbd className="font-sans">Shift</kbd> +{' '}
-          <kbd className="font-sans">Enter</kbd> for a new line
-        </p>
-      )}
+      {/* Hint centred, usage pinned right: a three-column grid keeps the hint
+          centred on the composer even when the usage chip is present. */}
+      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <span />
+        {showHint ? (
+          <p className="text-muted-foreground hidden text-center text-xs sm:block">
+            <kbd className="font-sans">Enter</kbd> to send &middot; <kbd className="font-sans">Shift</kbd> +{' '}
+            <kbd className="font-sans">Enter</kbd> for a new line
+          </p>
+        ) : (
+          <span />
+        )}
+        <div className="justify-self-end">{usage}</div>
+      </div>
     </div>
   )
 }

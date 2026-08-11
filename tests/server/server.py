@@ -17,6 +17,7 @@ from pydantic_ai.messages import ModelMessage, RetryPromptPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, DeltaThinkingPart, DeltaToolCall, FunctionModel
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
+from pydantic_ai.ui.vercel_ai._event_stream import VercelAIEventStream
 
 agent = Agent(output_type=[str, DeferredToolRequests])
 
@@ -262,12 +263,49 @@ async def configure(request: Request) -> Response:
     return JSONResponse({"models": model_list, "builtinTools": BUILTIN_TOOLS})
 
 
+class UsageEventStream(VercelAIEventStream):
+    """Attach the run's token usage to the assistant message's metadata.
+
+    The adapter already merges `ModelResponse.metadata` into the `message-metadata`
+    chunk, so writing there is all it takes for `UIMessage.metadata.usage` to reach
+    the browser. Keys are camelCase to match the rest of the wire format.
+    """
+
+    async def handle_run_result(self, event):  # type: ignore[override]
+        usage = event.result.usage
+        response = event.result.response
+        response.metadata = {
+            **(response.metadata or {}),
+            "usage": {
+                "inputTokens": usage.input_tokens,
+                "outputTokens": usage.output_tokens,
+                "totalTokens": usage.total_tokens,
+                "cacheReadTokens": usage.cache_read_tokens,
+                "cacheWriteTokens": usage.cache_write_tokens,
+                "requests": usage.requests,
+                "toolCalls": usage.tool_calls,
+            },
+        }
+        async for chunk in super().handle_run_result(event):
+            yield chunk
+
+
+class UsageAdapter(VercelAIAdapter):
+    def build_event_stream(self):  # type: ignore[override]
+        return UsageEventStream(
+            self.run_input,
+            accept=self.accept,
+            sdk_version=self.sdk_version,
+            server_message_id=self.server_message_id,
+        )
+
+
 async def chat(request: Request) -> Response:
-    adapter = await VercelAIAdapter.from_request(request, agent=agent, sdk_version=SDK_VERSION)
+    adapter = await UsageAdapter.from_request(request, agent=agent, sdk_version=SDK_VERSION)
     extra = adapter.run_input.__pydantic_extra__ or {}
     model_id = extra.get("model")
     model_ref = models.get(model_id.split("::")[-1]) if model_id else None
-    return await VercelAIAdapter.dispatch_request(
+    return await UsageAdapter.dispatch_request(
         request, agent=agent, model=model_ref, sdk_version=SDK_VERSION,
     )
 
