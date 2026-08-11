@@ -52,7 +52,9 @@ export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
         className="text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground group flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors"
       >
         <EffortBars level={current} total={THINKING_EFFORT_LEVELS.length} className="group-hover:opacity-90" />
-        {EFFORT_LABELS[level]}
+        {/* On a narrow screen the bars carry the meaning on their own; the
+            accessible name still spells the level out. */}
+        <span className="hidden sm:inline">{EFFORT_LABELS[level]}</span>
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-64 p-1.5">

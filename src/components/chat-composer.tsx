@@ -87,8 +87,10 @@ export function ChatComposer({
           value={input}
           autoFocus={true}
         />
-        <PromptInputToolbar>
-          <PromptInputTools>
+        <PromptInputToolbar className="gap-2">
+          {/* The run controls scroll sideways on a narrow screen instead of
+              pushing the send button off the edge. */}
+          <PromptInputTools className="no-scrollbar min-w-0 flex-1 overflow-x-auto [&>*]:shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <PromptInputButton variant="ghost" aria-label="Hidden tools" onClick={onOpenFilters}>
@@ -129,14 +131,19 @@ export function ChatComposer({
           {isBusy ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <PromptInputSubmit type="button" aria-label="Stop generating" onClick={onStop}>
+                <PromptInputSubmit type="button" aria-label="Stop generating" onClick={onStop} className="shrink-0">
                   <SquareIcon className="size-4 fill-current" />
                 </PromptInputSubmit>
               </TooltipTrigger>
               <TooltipContent>Stop generating</TooltipContent>
             </Tooltip>
           ) : (
-            <PromptInputSubmit disabled={!input.trim()} status={status} aria-label="Send message" />
+            <PromptInputSubmit
+              disabled={!input.trim()}
+              status={status}
+              aria-label="Send message"
+              className="shrink-0"
+            />
           )}
         </PromptInputToolbar>
       </PromptInput>

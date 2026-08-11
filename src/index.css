@@ -196,6 +196,16 @@
   }
 }
 
+/* Scrollable without the bar: used by the composer toolbar, which scrolls
+   sideways on narrow screens rather than clipping its controls. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* Thin, theme-aware scrollbar. The thumb is derived from the foreground colour
    so it reads correctly in both themes instead of being pinned to one hue, and
    it only gains contrast on hover so it stays quiet while reading. */
