@@ -513,7 +513,11 @@ const ChatInner = () => {
           )}
 
           {status === 'error' && error && (
-            <ChatError message={error.message} onRetry={handleRetry} onContinue={handleContinue} />
+            // Indented to the assistant column, so a failure lines up with the
+            // reply it belongs to instead of starting at the page edge.
+            <div className="sm:pl-10">
+              <ChatError message={error.message} onRetry={handleRetry} onContinue={handleContinue} />
+            </div>
           )}
         </ConversationContent>
         <ConversationScrollButton className="bg-background shadow-md" />

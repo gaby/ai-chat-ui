@@ -39,6 +39,7 @@ interface ToolPartHeaderProps {
   toolName: string
   state: ToolState
   input: unknown
+  errorText?: string
 }
 
 // A state outside the seven mapped ones can only arrive from a newer adapter or
@@ -54,9 +55,12 @@ const STATUS_BY_KEY = STATUS as Partial<Record<string, StatusEntry>>
  * before deciding to expand — which tool, and with what — and colours the state
  * rather than shouting it with a filled badge.
  */
-export function ToolPartHeader({ toolName, state, input }: ToolPartHeaderProps) {
+export function ToolPartHeader({ toolName, state, input, errorText }: ToolPartHeaderProps) {
   const { label, icon: StatusIcon, className } = STATUS_BY_KEY[state] ?? UNKNOWN_STATUS
-  const summary = useMemo(() => summarizeToolInput(input), [input])
+  const argumentSummary = useMemo(() => summarizeToolInput(input), [input])
+  // On a failed call the reason is what the reader wants from the collapsed
+  // row; the arguments are still one click away.
+  const summary = errorText ? errorText.replace(/\s+/g, ' ').trim() : argumentSummary
 
   return (
     <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors">
@@ -68,7 +72,16 @@ export function ToolPartHeader({ toolName, state, input }: ToolPartHeaderProps) 
             tech: colour and icon shape alone cannot carry "Error" vs "Denied". */}
         <span className="sr-only sm:not-sr-only">{label}</span>
       </span>
-      {summary && <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">{summary}</span>}
+      {summary && (
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate text-xs',
+            errorText ? 'text-destructive/80' : 'text-muted-foreground',
+          )}
+        >
+          {summary}
+        </span>
+      )}
       {/* The trailing spacer is the slot `ToolPart` overlays its hover-revealed
           hide button into, reserved up front so nothing shifts on hover. */}
       <ChevronDownIcon className="text-muted-foreground ml-auto size-3.5 shrink-0 transition-transform group-data-[state=open]/tool-part:rotate-180" />

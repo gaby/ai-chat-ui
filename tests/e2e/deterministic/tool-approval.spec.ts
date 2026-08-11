@@ -8,9 +8,13 @@ test.describe('tool approval', () => {
     await sendMessage(page, 'approval', 'Send an email')
 
     const card = toolCard(page, 'send_email')
-    // ToolPart auto-opens on approval-requested, so the buttons should be
+    // ToolPart auto-opens on approval-requested, so the prompt should be
     // visible without needing to expand the card manually.
     await expect(card.getByText('Approval Required')).toBeVisible()
+    await expect(card.getByText('This tool requires your approval to run')).toBeVisible()
+    // The prompt names the tool it is asking about and says nothing has run.
+    await expect(card.getByText('has not run yet')).toBeVisible()
+    await expect(card.getByRole('heading', { name: 'Arguments' })).toBeVisible()
     await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible()
     await expect(card.getByRole('button', { name: 'Deny' })).toBeVisible()
 

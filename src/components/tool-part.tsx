@@ -1,16 +1,34 @@
-import { Tool, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { ToolApprovalPrompt } from '@/components/tool-approval-prompt'
-import { ToolPartHeader } from '@/components/tool-part-header'
+import { ToolError } from '@/components/tool-error'
 import { ToolOutputCode } from '@/components/tool-output-code'
+import { ToolPartHeader } from '@/components/tool-part-header'
+import { ToolSection } from '@/components/tool-section'
 import { RunCodeInput } from '@/components/run-code-input'
 import { isRunCodeOutput, RunCodeOutput } from '@/components/run-code-output'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { useToolFilters } from '@/contexts/tool-filters'
+import { cn } from '@/lib/utils'
 import type { ChatAddToolApproveResponseFunction, DynamicToolUIPart, ToolUIPart } from 'ai'
 import { EyeOffIcon } from 'lucide-react'
-import { memo, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-// Memoize to avoid re-running highlighters on unchanged code.
-const ToolInputMemo = memo(ToolInput)
+// The card's left edge carries the state, so a run of cards can be scanned for
+// the one that needs attention without reading a word.
+const ACCENT: Partial<Record<(ToolUIPart | DynamicToolUIPart)['state'], string>> = {
+  'input-available': 'border-l-primary/60',
+  'approval-requested': 'border-l-amber-500',
+  'output-error': 'border-l-destructive/60',
+  'output-denied': 'border-l-destructive/60',
+}
+
+function stringify(value: unknown): string {
+  try {
+    const json: unknown = JSON.stringify(value, null, 2)
+    return typeof json === 'string' ? json : String(value)
+  } catch {
+    return String(value)
+  }
+}
 
 interface ToolPartProps {
   part: ToolUIPart | DynamicToolUIPart
@@ -24,20 +42,25 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
 
   // Auto-open the card whenever an approval is requested — `defaultOpen` only
   // runs at mount, but the transition into `approval-requested` happens after
-  // mount, so the Confirmation prompt would otherwise stay collapsed.
+  // mount, so the prompt would otherwise stay collapsed.
   useEffect(() => {
     if (part.state === 'approval-requested') setOpen(true)
   }, [part.state])
 
   const toolName = part.type === 'dynamic-tool' ? part.toolName : part.type.split('-').slice(1).join('-')
   const isRunCode = toolName === 'run_code'
+  const inputText = useMemo(() => stringify(part.input), [part.input])
+  const hasOutput = part.state === 'output-available' || part.state === 'output-error'
 
   return (
-    <Tool
+    <Collapsible
       data-tool-name={toolName}
       open={open}
       onOpenChange={setOpen}
-      className="group/tool-part bg-card relative mb-0 rounded-xl"
+      className={cn(
+        'not-prose group/tool-part bg-card relative w-full overflow-hidden rounded-xl border border-l-2',
+        ACCENT[part.state] ?? 'border-l-transparent',
+      )}
     >
       <button
         type="button"
@@ -50,23 +73,49 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
       >
         <EyeOffIcon className="size-3.5" />
       </button>
-      <ToolPartHeader toolName={toolName} state={part.state} input={part.input} />
-      <ToolContent>
+
+      <ToolPartHeader toolName={toolName} state={part.state} input={part.input} errorText={part.errorText} />
+
+      <CollapsibleContent>
         {open && (
           <>
-            {isRunCode ? <RunCodeInput input={part.input} /> : <ToolInputMemo input={part.input} />}
-            {approval && (
-              <ToolApprovalPrompt approval={approval} state={part.state} onApprovalResponse={onApprovalResponse} />
+            {isRunCode ? (
+              <RunCodeInput input={part.input} />
+            ) : (
+              <ToolSection label="Arguments" copyText={inputText}>
+                <div className="bg-muted/40 overflow-hidden rounded-md">
+                  <ToolOutputCode output={part.input} />
+                </div>
+              </ToolSection>
             )}
-            {(part.state === 'output-available' || part.state === 'output-error') &&
-              (isRunCode && !part.errorText && isRunCodeOutput(part.output) ? (
+
+            {approval && (
+              <ToolApprovalPrompt
+                approval={approval}
+                toolName={toolName}
+                state={part.state}
+                onApprovalResponse={onApprovalResponse}
+              />
+            )}
+
+            {part.errorText && <ToolError errorText={part.errorText} />}
+
+            {hasOutput &&
+              !part.errorText &&
+              (isRunCode && isRunCodeOutput(part.output) ? (
                 <RunCodeOutput output={part.output} />
               ) : (
-                <ToolOutput errorText={part.errorText} output={<ToolOutputCode output={part.output} />} />
+                part.output !== undefined && (
+                  <ToolSection label="Result" copyText={stringify(part.output)}>
+                    <div className="bg-muted/40 overflow-x-auto rounded-md [&_table]:w-full">
+                      <ToolOutputCode output={part.output} />
+                    </div>
+                  </ToolSection>
+                )
               ))}
           </>
         )}
-      </ToolContent>
-    </Tool>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

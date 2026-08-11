@@ -106,6 +106,24 @@ async def stream_reasoning(
     yield "Here is the considered answer."
 
 
+async def stream_failure(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str]:
+    """Fails the run itself, so specs can exercise the request-failure UI.
+
+    The message is deliberately long and multi-line, the shape a provider error
+    actually arrives in — that is what the error card's summary/details split is
+    for.
+    """
+    yield "Working on it"
+    await asyncio.sleep(0.2)
+    raise RuntimeError(
+        "Upstream provider returned 503 Service Unavailable.\n"
+        "request_id=req_8f2c41ab-77de-4d0e-9a11-6bc2d0f4e7c3\n"
+        "The model endpoint is temporarily overloaded. Retrying in a few seconds usually succeeds."
+    )
+
+
 async def stream_markdown(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str]:
@@ -240,6 +258,7 @@ models: dict[str, object] = {
     "text": FunctionModel(stream_function=stream_text),
     "markdown": FunctionModel(stream_function=stream_markdown),
     "slow": FunctionModel(stream_function=stream_slow),
+    "failure": FunctionModel(stream_function=stream_failure),
     "reasoning": FunctionModel(stream_function=stream_reasoning),
     "tool": FunctionModel(stream_function=stream_tool),
     "multi-tool": FunctionModel(stream_function=stream_multi_tool),
