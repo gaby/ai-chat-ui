@@ -325,7 +325,7 @@ const ChatInner = () => {
 
   return (
     <>
-      <Conversation className="h-full">
+      <Conversation className="h-full" aria-label="Conversation">
         <ConversationContent
           className={cn(
             'mx-auto flex w-full max-w-3xl flex-col px-4 pt-2 pb-6',
@@ -344,8 +344,9 @@ const ChatInner = () => {
             }
 
             const sourceParts = message.parts.filter((part) => part.type === 'source-url')
+            const isLast = message.id === messages.at(-1)?.id
             return (
-              <AssistantTurn key={message.id}>
+              <AssistantTurn key={message.id} isStreaming={status === 'streaming' && isLast}>
                 {sourceParts.length > 0 && (
                   <Sources className="mb-0">
                     <SourcesTrigger count={sourceParts.length} />

@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.messages import ModelMessage, RetryPromptPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaThinkingPart, DeltaToolCall, FunctionModel
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
@@ -82,6 +82,15 @@ async def stream_slow(
     for chunk in ["Taking ", "my ", "time ", "here."]:
         yield chunk
         await asyncio.sleep(0.6)
+
+
+async def stream_reasoning(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaThinkingPart]]:
+    """Emits a thinking part before the answer, so specs can exercise the reasoning UI."""
+    yield {0: DeltaThinkingPart(content="Working through the question step by step. ")}
+    yield {0: DeltaThinkingPart(content="The answer follows from the premise.")}
+    yield "Here is the considered answer."
 
 
 async def stream_markdown(
@@ -218,6 +227,7 @@ models: dict[str, object] = {
     "text": FunctionModel(stream_function=stream_text),
     "markdown": FunctionModel(stream_function=stream_markdown),
     "slow": FunctionModel(stream_function=stream_slow),
+    "reasoning": FunctionModel(stream_function=stream_reasoning),
     "tool": FunctionModel(stream_function=stream_tool),
     "multi-tool": FunctionModel(stream_function=stream_multi_tool),
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),
