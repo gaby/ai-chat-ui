@@ -88,8 +88,14 @@ async def stream_slow(
 async def stream_reasoning(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaThinkingPart]]:
-    """Emits a thinking part before the answer, so specs can exercise the reasoning UI."""
-    yield {0: DeltaThinkingPart(content="Working through the question step by step. ")}
+    """Emits a thinking part before the answer, so specs can exercise the reasoning UI.
+
+    Structured the way reasoning models summarise their steps — a heading per
+    step, then its body — which is what the trace timeline renders from.
+    """
+    yield {0: DeltaThinkingPart(content="**Understanding the question**\n")}
+    yield {0: DeltaThinkingPart(content="Working through the question step by step.\n\n")}
+    yield {0: DeltaThinkingPart(content="**Weighing the options**\n")}
     yield {0: DeltaThinkingPart(content="The answer follows from the premise.")}
     yield "Here is the considered answer."
 

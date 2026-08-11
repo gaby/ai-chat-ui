@@ -1,7 +1,7 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { Action } from '@/components/ai-elements/actions'
+import { MessageAction } from '@/components/message-action'
 
 const RESET_DELAY = 1500
 
@@ -36,8 +36,8 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
   }
 
   return (
-    <Action onClick={copy} label={label} tooltip={copied ? 'Copied' : label}>
+    <MessageAction label={copied ? 'Copied' : label} onClick={copy}>
       {copied ? <CheckIcon className="text-primary size-3.5" /> : <CopyIcon className="size-3.5" />}
-    </Action>
+    </MessageAction>
   )
 }

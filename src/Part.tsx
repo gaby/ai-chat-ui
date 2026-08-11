@@ -1,12 +1,12 @@
-import { Actions, Action } from '@/components/ai-elements/actions'
 import { Response } from '@/components/ai-elements/response'
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
 import type { ChatAddToolApproveResponseFunction, UIDataTypes, UIMessagePart, UITools, UIMessage } from 'ai'
 import { useEffect, useState } from 'react'
 import { useForkSiblings } from '@/hooks/useForkSiblings'
-import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { CopyButton } from '@/components/copy-button'
+import { MessageAction } from '@/components/message-action'
 import { MessageUsage } from '@/components/message-usage'
+import { ReasoningBlock } from '@/components/reasoning-block'
 import { ToolPart } from '@/components/tool-part'
 import { UserBubble } from '@/components/user-bubble'
 
@@ -77,28 +77,26 @@ export function Part({
               autoFocus
             />
           </UserBubble>
-          <Actions className="mt-1 justify-end">
-            <Action
+          <div className="mt-1 flex items-center justify-end gap-0.5">
+            <MessageAction
+              label="Submit edit"
               onClick={() => {
                 onSubmitEdit?.(message.id, editText)
               }}
-              label="Submit edit"
-              tooltip="Submit edit"
               className="text-primary hover:text-primary"
             >
               <CheckIcon className="size-3.5" />
-            </Action>
-            <Action
+            </MessageAction>
+            <MessageAction
+              label="Cancel edit"
               onClick={() => {
                 onCancelEdit?.(message.id, editText)
               }}
-              label="Cancel edit"
-              tooltip="Cancel edit"
               className="text-destructive hover:text-destructive"
             >
               <XIcon className="size-3.5" />
-            </Action>
-          </Actions>
+            </MessageAction>
+          </div>
         </div>
       )
     }
@@ -110,20 +108,19 @@ export function Part({
             <Response>{part.text}</Response>
           </UserBubble>
           {index === message.parts.length - 1 && (
-            <div className="mt-1 flex items-center justify-end gap-2">
+            <div className="mt-1 flex items-center justify-end gap-0.5">
               {status !== 'submitted' && status !== 'streaming' && (
-                <Actions className="opacity-0 transition-opacity group-hover/user-message:opacity-100 focus-within:opacity-100">
-                  <Action
+                <>
+                  <MessageAction
+                    label="Edit message"
                     onClick={() => {
                       onStartEdit?.(message.id)
                     }}
-                    label="Edit message"
-                    tooltip="Edit message"
                   >
                     <PencilIcon className="size-3.5" />
-                  </Action>
+                  </MessageAction>
                   <CopyButton text={part.text} label="Copy message" />
-                </Actions>
+                </>
               )}
               {conversationId && messageIndex !== undefined && onNavigateToFork && (
                 <ForkNavigation
@@ -144,31 +141,27 @@ export function Part({
       <div>
         <Response className="text-[0.9375rem] leading-7">{part.text}</Response>
         {index === message.parts.length - 1 && (
-          <Actions className="-ml-2 opacity-0 transition-opacity group-hover/assistant:opacity-100 focus-within:opacity-100">
-            <Action
+          <div className="mt-1 flex items-center gap-0.5">
+            <CopyButton text={part.text} label="Copy response" />
+            <MessageAction
+              label="Regenerate response"
               onClick={() => {
                 regen(message.id)
               }}
-              label="Regenerate response"
-              tooltip="Regenerate"
             >
               <RefreshCcwIcon className="size-3.5" />
-            </Action>
-            <CopyButton text={part.text} label="Copy response" />
+            </MessageAction>
             <MessageUsage message={message} />
-          </Actions>
+          </div>
         )}
       </div>
     )
   } else if (part.type === 'reasoning') {
     return (
-      <Reasoning
-        className="bg-muted/40 mb-0 w-full rounded-xl border px-3 py-2"
+      <ReasoningBlock
+        text={part.text}
         isStreaming={status === 'streaming' && index === message.parts.length - 1 && lastMessage}
-      >
-        <ReasoningTrigger />
-        <ReasoningContent>{part.text}</ReasoningContent>
-      </Reasoning>
+      />
     )
   } else if (part.type === 'dynamic-tool' || 'toolCallId' in part) {
     return <ToolPart part={part} onApprovalResponse={onApprovalResponse} />
