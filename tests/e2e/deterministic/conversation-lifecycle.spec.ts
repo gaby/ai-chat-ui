@@ -49,6 +49,29 @@ test.describe('conversation lifecycle', () => {
     await expect(sidebar(page).getByText('Delete me')).not.toBeVisible()
   })
 
+  test('a deleted conversation stays deleted at its own URL', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'text', 'Delete me for good')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+    const deletedUrl = page.url()
+
+    await sidebar(page)
+      .getByRole('button', { name: 'Conversation options: Delete me for good' })
+      .click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+    await expect(page.getByText('Chat deleted successfully')).toBeVisible()
+
+    // Deleting the conversation you are looking at navigates away, and leaving a
+    // conversation flushes what was on screen — so the flush landed after the
+    // delete and wrote the history back. The row was gone from the sidebar while
+    // the URL still served the whole conversation.
+    await page.goto(deletedUrl)
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+    await expect(chat(page).getByText('Delete me for good')).toHaveCount(0)
+  })
+
   test('deleting inactive conversation preserves current view', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'text', 'Keep this')

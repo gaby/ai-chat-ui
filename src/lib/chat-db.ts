@@ -89,6 +89,8 @@ export async function saveConversation(
   conversation: ConversationEntry,
   { notify = true }: SaveConversationOptions = {},
 ): Promise<void> {
+  if (deletedConversations.has(conversation.id)) return
+
   try {
     const db = await openDatabase()
     await new Promise<void>((resolve, reject) => {
@@ -154,7 +156,22 @@ async function touchConversation(conversationId: string, at: number): Promise<vo
   if (touched) notifyConversationsChanged()
 }
 
+/**
+ * Conversations deleted in this session.
+ *
+ * A delete has to beat writes that were already in flight when it landed.
+ * Leaving the conversation flushes whatever was on screen, and deleting the one
+ * you are looking at navigates away — so the flush ran *after* the delete and
+ * put the messages back. The sidebar entry stayed gone, but the URL still
+ * loaded the full history, which is not what "cannot be undone" promised.
+ *
+ * Ids are nanoids and never reused, so suppressing them for the life of the tab
+ * cannot block a later legitimate write.
+ */
+const deletedConversations = new Set<string>()
+
 export async function deleteConversation(conversationId: string): Promise<void> {
+  deletedConversations.add(conversationId)
   const db = await openDatabase()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
@@ -208,6 +225,8 @@ export async function saveMessages(
   messages: UIMessage[],
   { touch = true }: SaveMessagesOptions = {},
 ): Promise<void> {
+  if (deletedConversations.has(conversationId)) return
+
   try {
     const db = await openDatabase()
     await new Promise<void>((resolve, reject) => {

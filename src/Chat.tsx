@@ -139,6 +139,13 @@ const ChatInner = () => {
   }, [configQuery.data, model])
 
   useEffect(() => {
+    // A read that is still in flight when the next navigation starts must not
+    // install its result: IndexedDB reads can finish out of order, so a large
+    // history left behind could land on top of the small one now on screen —
+    // the previous conversation's messages under this one's title, and anything
+    // typed next saved against the stale id.
+    let superseded = false
+
     setEditingMessageId(null)
 
     // The conversation this session just created: the messages already in
@@ -184,6 +191,7 @@ const ChatInner = () => {
     if (conversationId !== '/') {
       getMessages(conversationId)
         .then((storedMessages) => {
+          if (superseded) return
           const loaded = storedMessages ?? []
           loadedMessagesRef.current = loaded
           setMessages(loaded)
@@ -196,6 +204,7 @@ const ChatInner = () => {
           }
         })
         .catch((err: unknown) => {
+          if (superseded) return
           console.error('Failed to load messages:', err)
           toast.error('Failed to load this conversation from browser storage.')
           // Mark it loaded anyway. Leaving it `null` looks harmless but leaves
@@ -205,6 +214,10 @@ const ChatInner = () => {
         })
     }
     textareaRef.current?.focus()
+
+    return () => {
+      superseded = true
+    }
   }, [conversationId])
 
   const handleSubmit = (e: SyntheticEvent) => {
