@@ -13,10 +13,12 @@ const AUTO_COLLAPSE_DELAY = 1000
 const MAX_NAMED_TOOLS = 3
 
 interface TurnActivityProps {
-  /** Tool names in call order, deduplicated. */
-  toolNames: string[]
-  /** Per-call states, for deciding what still needs a human. */
-  states: string[]
+  /**
+   * One entry per call, in order. Names are deduplicated for the summary line
+   * only — pairing them here keeps "which tool is still running" answerable
+   * after a repeated call collapses two entries into one name.
+   */
+  calls: { name: string; state: string }[]
   hasReasoning: boolean
   isStreaming: boolean
   /** One row per step: reasoning trace, tool card, tool group. */
@@ -42,14 +44,14 @@ function summarize(toolNames: string[]): string {
  * is worth anything, and folds up once the answer lands. Anything that needs a
  * person — a pending approval, a failed call — holds it open instead.
  */
-export function TurnActivity({ toolNames, states, hasReasoning, isStreaming, children }: TurnActivityProps) {
+export function TurnActivity({ calls, hasReasoning, isStreaming, children }: TurnActivityProps) {
   const [open, setOpen] = useState(isStreaming)
   const [duration, setDuration] = useState(0)
   const startedAt = useRef<number | null>(null)
   const userToggled = useRef(false)
 
-  const needsApproval = states.includes('approval-requested')
-  const hasError = states.includes('output-error')
+  const needsApproval = calls.some((call) => call.state === 'approval-requested')
+  const hasError = calls.some((call) => call.state === 'output-error')
   // A decision to make or a failure to read is not something to fold away.
   const held = needsApproval || hasError
 
@@ -87,8 +89,8 @@ export function TurnActivity({ toolNames, states, hasReasoning, isStreaming, chi
     if (held) setOpen(true)
   }, [held])
 
-  const running = toolNames.find((_, i) => !COMPLETE_TOOL_STATES.has(states[i] ?? ''))
-  const trail = summarize(toolNames)
+  const running = calls.find((call) => !COMPLETE_TOOL_STATES.has(call.state))?.name
+  const trail = summarize([...new Set(calls.map((call) => call.name))])
 
   let label: string
   let Icon = SparklesIcon

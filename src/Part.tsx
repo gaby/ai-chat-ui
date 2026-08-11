@@ -107,8 +107,12 @@ export function Part({
           <UserBubble>
             <Markdown>{part.text}</Markdown>
           </UserBubble>
+          {/* `-mr-[7px]` undoes the icon buttons' own padding — a `size-7`
+              button around a `size-3.5` icon insets the glyph 7px — so the last
+              icon lines up with the bubble's right edge instead of floating
+              inside it. */}
           {index === message.parts.length - 1 && (
-            <div className="mt-1 flex items-center justify-end gap-0.5">
+            <div className="mt-1 -mr-[7px] flex items-center justify-end gap-0.5">
               {status !== 'submitted' && status !== 'streaming' && (
                 <>
                   <MessageAction
@@ -142,8 +146,10 @@ export function Part({
         {/* `h-auto` overrides the vendored Response's `size-full`, which stretched
             inside this flex column and pushed the actions row out of the turn. */}
         <Markdown className="h-auto text-[0.9375rem] leading-7">{part.text}</Markdown>
+        {/* `-ml-[7px]`: same correction as the user row, mirrored — the copy
+            glyph sits on the same left edge as the prose above it. */}
         {index === message.parts.length - 1 && (
-          <div className="mt-1 flex items-center gap-0.5">
+          <div className="mt-1 -ml-[7px] flex items-center gap-0.5">
             <CopyButton text={part.text} label="Copy response" />
             <MessageAction
               label="Regenerate response"

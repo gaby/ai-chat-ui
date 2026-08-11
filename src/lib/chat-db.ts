@@ -171,7 +171,20 @@ async function touchConversation(conversationId: string, at: number): Promise<vo
 const deletedConversations = new Set<string>()
 
 export async function deleteConversation(conversationId: string): Promise<void> {
-  const db = await openDatabase()
+  // Marked before the transaction opens, not after it commits: a throttled save
+  // that starts in between would pass the guard and queue behind the delete,
+  // writing the history back once it completed. Rolled back below if the delete
+  // itself fails, so a conversation that is still there stays writable.
+  deletedConversations.add(conversationId)
+
+  let db: IDBDatabase
+  try {
+    db = await openDatabase()
+  } catch (error) {
+    deletedConversations.delete(conversationId)
+    throw error
+  }
+
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
 
@@ -182,15 +195,11 @@ export async function deleteConversation(conversationId: string): Promise<void> 
     msgStore.delete(conversationId)
 
     tx.oncomplete = () => {
-      // Recorded on success only, and before this promise resolves — the caller
-      // navigates in its `.then`, and it is that navigation's flush the
-      // tombstone has to beat. Setting it up front would leave a conversation
-      // that failed to delete silently unwritable for the rest of the session.
-      deletedConversations.add(conversationId)
       notifyConversationsChanged()
       resolve()
     }
     tx.onerror = () => {
+      deletedConversations.delete(conversationId)
       reject(new Error(tx.error?.message ?? 'Failed to delete conversation'))
     }
   })

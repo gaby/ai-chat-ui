@@ -75,7 +75,11 @@ export function ChatComposer({
   const isBusy = status === 'submitted' || status === 'streaming'
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    // `px-4` matches `ConversationContent`, so the composer's border sits on the
+    // same left and right edges as the messages above it. Without it the
+    // composer was 16px wider on each side — a visible step between the box you
+    // type into and the column it lands in.
+    <div className="mx-auto w-full max-w-3xl px-4">
       <PromptInput onSubmit={onSubmit} className="ring-primary/25 rounded-2xl shadow-sm">
         <PromptInputTextarea
           // The vendored Textarea floors at min-h-16, which left a band of dead

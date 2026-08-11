@@ -111,7 +111,13 @@ const ChatInner = () => {
   const [pendingEdit, setPendingEdit] = useState<{ messageId: string; text: string } | null>(null)
   // Deferred send: set this ref, then call setMessages. The useEffect below
   // will fire sendMessage after the messages state has been committed.
-  const pendingSendRef = useRef<{ text: string; model: string; builtinTools: string[] } | null>(null)
+  const pendingSendRef = useRef<{
+    text: string
+    model: string
+    builtinTools: string[]
+    /** The conversation this was queued for; '/' means "wherever we are". */
+    conversationId: string
+  } | null>(null)
   const [sendTrigger, setSendTrigger] = useState(0)
 
   const configQuery = useQuery({
@@ -198,9 +204,10 @@ const ChatInner = () => {
           setMessages(loaded)
           setLoadedConversationId(conversationId)
 
-          // Auto-send pending fork message after loading forked conversation
-          // Uses deferred send to ensure setMessages is committed first
-          if (pendingSendRef.current) {
+          // Auto-send the forked message once its own conversation is loaded.
+          // Navigating elsewhere before the read lands must not deliver it into
+          // whichever conversation happens to finish loading next.
+          if (pendingSendRef.current?.conversationId === conversationId) {
             setSendTrigger((n) => n + 1)
           }
         })
@@ -229,6 +236,10 @@ const ChatInner = () => {
     // typed while a tool call is in flight would drop the streaming assistant
     // turn below and fire a second, concurrent request.
     if (status === 'submitted' || status === 'streaming') return
+    // The history is still being read: `messages` is empty, so the request
+    // would go out without it and the read would then land on top of whatever
+    // came back.
+    if (loadedConversationId !== conversationId) return
     // The send button is disabled without a model, but Enter bypasses it. Sending
     // `model: ''` either fails the request or lets the backend pick something the
     // user did not choose.
@@ -257,7 +268,7 @@ const ChatInner = () => {
       // remove without a word, and it is easy to trigger by typing instead of
       // answering an approval prompt.
       toast.info('Removed the unfinished tool call so your message could be sent.')
-      pendingSendRef.current = { text: input, model, builtinTools: enabledTools }
+      pendingSendRef.current = { text: input, model, builtinTools: enabledTools, conversationId }
       setMessages(messages.slice(0, -1))
       setTimeout(() => {
         setSendTrigger((n) => n + 1)
@@ -324,14 +335,14 @@ const ChatInner = () => {
     const messageIndex = messages.findIndex((m) => m.id === pendingEdit.messageId)
     if (messageIndex === -1) return
 
-    pendingSendRef.current = { text: pendingEdit.text, model, builtinTools: enabledTools }
+    pendingSendRef.current = { text: pendingEdit.text, model, builtinTools: enabledTools, conversationId }
     setMessages(messages.slice(0, messageIndex))
     setPendingEdit(null)
     // Defer to next macrotask so setMessages commits before the send effect fires
     setTimeout(() => {
       setSendTrigger((n) => n + 1)
     }, 0)
-  }, [pendingEdit, messages, setMessages, model, enabledTools])
+  }, [pendingEdit, messages, setMessages, model, enabledTools, conversationId])
 
   // Retry: re-run the last user message, discarding everything generated after
   // it (partial assistant text, in-progress tool parts, whole tool-loop turns).
@@ -345,13 +356,13 @@ const ChatInner = () => {
     const text = textPart && 'text' in textPart ? textPart.text : ''
 
     clearError()
-    pendingSendRef.current = { text, model, builtinTools: enabledTools }
+    pendingSendRef.current = { text, model, builtinTools: enabledTools, conversationId }
     // Drop the user message too; the deferred send re-adds it cleanly.
     setMessages(messages.slice(0, i))
     setTimeout(() => {
       setSendTrigger((n) => n + 1)
     }, 0)
-  }, [messages, clearError, setMessages, model, enabledTools])
+  }, [messages, clearError, setMessages, model, enabledTools, conversationId])
 
   // Continue: append a `continue` user message to a valid history. If the run
   // errored mid-tool-call, the trailing assistant message may hold a tool part
@@ -361,7 +372,7 @@ const ChatInner = () => {
     const lastMessage = messages.at(-1)
     if (lastMessage?.role === 'assistant' && hasIncompleteToolPart(lastMessage.parts)) {
       clearError()
-      pendingSendRef.current = { text: 'continue', model, builtinTools: enabledTools }
+      pendingSendRef.current = { text: 'continue', model, builtinTools: enabledTools, conversationId }
       setMessages(messages.slice(0, -1))
       setTimeout(() => {
         setSendTrigger((n) => n + 1)
@@ -373,7 +384,7 @@ const ChatInner = () => {
     sendMessage({ text: 'continue' }).catch((error: unknown) => {
       console.error('Error continuing message:', error)
     })
-  }, [messages, clearError, setMessages, sendMessage, model, enabledTools])
+  }, [messages, clearError, setMessages, sendMessage, model, enabledTools, conversationId])
 
   const handleFork = useCallback(() => {
     if (!pendingEdit) return
@@ -398,7 +409,12 @@ const ChatInner = () => {
     })
 
     // Set up pending message to auto-send after navigation
-    pendingSendRef.current = { text: pendingEdit.text, model, builtinTools: enabledTools }
+    pendingSendRef.current = {
+      text: pendingEdit.text,
+      model,
+      builtinTools: enabledTools,
+      conversationId: newConversationId,
+    }
 
     setPendingEdit(null)
     setConversationId(newConversationId)
@@ -463,14 +479,16 @@ const ChatInner = () => {
     )
 
   const configBanner = configQuery.isError && (
-    <ConfigErrorBanner
-      isRetrying={configQuery.isFetching}
-      onRetry={() => {
-        configQuery.refetch().catch((error: unknown) => {
-          console.error('Error reloading configuration:', error)
-        })
-      }}
-    />
+    <div className="mx-auto w-full max-w-3xl px-4">
+      <ConfigErrorBanner
+        isRetrying={configQuery.isFetching}
+        onRetry={() => {
+          configQuery.refetch().catch((error: unknown) => {
+            console.error('Error reloading configuration:', error)
+          })
+        }}
+      />
+    </div>
   )
 
   const renderComposer = (showHint: boolean) => (
@@ -539,7 +557,7 @@ const ChatInner = () => {
         {/* `my-auto` rather than `items-center`: a centred flex child cannot be
             scrolled back to once it overflows, which clipped the heading on
             short viewports. */}
-        <div className="flex flex-1 flex-col overflow-y-auto px-3 py-8">
+        <div className="flex flex-1 flex-col overflow-y-auto py-8">
           <div className="my-auto w-full">
             <WelcomeScreen
               onSelect={handleSuggestion}
@@ -610,7 +628,10 @@ const ChatInner = () => {
       {/* The fade keeps text from colliding with the composer as it scrolls
           under the sticky footer. */}
       <div className="from-background pointer-events-none sticky bottom-0 h-6 bg-gradient-to-t to-transparent" />
-      <div className="bg-background sticky bottom-0 px-3 pt-1 pb-3">
+      {/* No horizontal padding here: the composer and the banner carry the same
+          `px-4` inside their own `max-w-3xl` box that `ConversationContent` does,
+          which is what puts all three on the same edges. */}
+      <div className="bg-background sticky bottom-0 pt-1 pb-3">
         {configBanner}
         {renderComposer(true)}
       </div>
@@ -697,8 +718,10 @@ function renderMessageParts(
     output.push(
       <TurnActivity
         key={`activity-${message.id}-${indices[0]}`}
-        toolNames={[...new Set(toolIndices.map((i) => toolNameOfPart(message.parts[i]) ?? ''))]}
-        states={toolIndices.map((i) => partState(message.parts[i]))}
+        calls={toolIndices.map((i) => ({
+          name: toolNameOfPart(message.parts[i]) ?? '',
+          state: partState(message.parts[i]),
+        }))}
         hasReasoning={indices.some((i) => message.parts[i].type === 'reasoning')}
         isStreaming={isStreaming}
       >

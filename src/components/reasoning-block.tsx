@@ -22,6 +22,7 @@ export function ReasoningBlock({ text, isStreaming }: { text: string; isStreamin
   const [duration, setDuration] = useState(0)
   const startedAt = useRef<number | null>(null)
   const hasAutoCollapsed = useRef(false)
+  const userToggled = useRef(false)
 
   // Timing and auto-collapse share one effect deliberately: they both key off
   // the same transition, and splitting them let the first clear `startedAt`
@@ -40,8 +41,11 @@ export function ReasoningBlock({ text, isStreaming }: { text: string; isStreamin
     setDuration(Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)))
     startedAt.current = null
 
-    if (hasAutoCollapsed.current) return
+    // Not once it has already folded itself, and not over someone who opened it
+    // — reopening during the grace period used to be undone a moment later.
+    if (hasAutoCollapsed.current || userToggled.current) return
     const timer = setTimeout(() => {
+      if (userToggled.current) return
       setOpen(false)
       hasAutoCollapsed.current = true
     }, AUTO_COLLAPSE_DELAY)
@@ -53,7 +57,14 @@ export function ReasoningBlock({ text, isStreaming }: { text: string; isStreamin
   const label = isStreaming ? 'Thinking' : duration > 0 ? `Thought for ${duration}s` : 'Thinking completed'
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="not-prose w-full">
+    <Collapsible
+      open={open}
+      onOpenChange={(next) => {
+        userToggled.current = true
+        setOpen(next)
+      }}
+      className="not-prose w-full"
+    >
       <CollapsibleTrigger className="text-muted-foreground hover:text-foreground group flex items-center gap-1.5 text-sm transition-colors">
         <LightbulbIcon className={cn('size-4', isStreaming && 'text-primary animate-pulse')} />
         <span className={cn(isStreaming && 'animate-pulse')}>{label}</span>
