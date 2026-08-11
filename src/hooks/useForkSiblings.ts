@@ -1,6 +1,5 @@
 import type { ConversationEntry } from '@/types'
-import { getConversations } from '@/lib/chat-db'
-import { useEffect, useState } from 'react'
+import { useConversations } from '@/hooks/useConversations'
 
 interface ForkSiblings {
   siblings: ConversationEntry[]
@@ -54,24 +53,6 @@ function computeSiblings(
 }
 
 export function useForkSiblings(conversationId: string, messageIndex: number): ForkSiblings {
-  const [conversations, setConversations] = useState<ConversationEntry[]>([])
-
-  useEffect(() => {
-    const loadConversations = () => {
-      getConversations()
-        .then(setConversations)
-        .catch((err: unknown) => {
-          console.error('Failed to load conversations for fork navigation:', err)
-        })
-    }
-
-    loadConversations()
-
-    window.addEventListener('conversations-changed', loadConversations)
-    return () => {
-      window.removeEventListener('conversations-changed', loadConversations)
-    }
-  }, [])
-
+  const conversations = useConversations()
   return computeSiblings(conversationId, messageIndex, conversations)
 }

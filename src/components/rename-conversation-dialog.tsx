@@ -1,4 +1,4 @@
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useState, type SyntheticEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -28,12 +28,10 @@ export function RenameConversationDialog({
   onOpenChange,
   onSubmit,
 }: RenameConversationDialogProps) {
+  // No effect syncing this back to the prop: the caller mounts one dialog per
+  // conversation (keyed), so mounting is what resets the field. A sync effect
+  // would wipe what the user had typed if the store re-read mid-edit.
   const [draft, setDraft] = useState(initialTitle)
-
-  // Reset whenever the dialog is opened for a (possibly different) conversation.
-  useEffect(() => {
-    if (open) setDraft(initialTitle)
-  }, [open, initialTitle])
 
   const submit = (event: SyntheticEvent) => {
     event.preventDefault()

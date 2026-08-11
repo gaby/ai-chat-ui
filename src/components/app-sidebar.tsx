@@ -1,6 +1,6 @@
 import { PlusIcon, SearchIcon } from 'lucide-react'
 import type React from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConversationList } from '@/components/conversation-list'
@@ -31,7 +31,6 @@ import { stripBasePath, withBasePath } from '@/lib/base-path'
 import { deleteConversation as deleteConv, saveConversation } from '@/lib/chat-db'
 import { conversationTitle } from '@/lib/conversation-title'
 import type { ConversationEntry } from '@/types'
-import { ModeToggle } from './mode-toggle'
 import logoSvg from '../assets/logo.svg'
 
 // Below this many conversations the list is short enough to scan, and a search
@@ -50,9 +49,8 @@ function doLocalNavigation(e: React.MouseEvent) {
 }
 
 function deleteConversation(conversationId: string) {
+  // `chat-db` emits `conversations-changed` itself.
   return deleteConv(conversationId).then(() => {
-    window.dispatchEvent(new Event('conversations-changed'))
-
     const currentPath = stripBasePath(window.location.pathname)
     if (currentPath === conversationId) {
       window.history.pushState({}, '', withBasePath('/'))
@@ -62,9 +60,7 @@ function deleteConversation(conversationId: string) {
 }
 
 function updateConversation(conversation: ConversationEntry, patch: Partial<ConversationEntry>) {
-  return saveConversation({ ...conversation, ...patch }).then(() => {
-    window.dispatchEvent(new Event('conversations-changed'))
-  })
+  return saveConversation({ ...conversation, ...patch })
 }
 
 export function AppSidebar() {
@@ -74,6 +70,13 @@ export function AppSidebar() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<ConversationEntry | null>(null)
   const [conversationToRename, setConversationToRename] = useState<ConversationEntry | null>(null)
+
+  // The box unmounts once the list is short enough to scan; a filter left
+  // behind would keep hiding rows with no input to clear it.
+  const showSearch = conversations.length >= SEARCH_THRESHOLD
+  useEffect(() => {
+    if (!showSearch) setQuery('')
+  }, [showSearch])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -140,7 +143,7 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
 
-        {conversations.length >= SEARCH_THRESHOLD && (
+        {showSearch && (
           <div className="relative group-data-[state=collapsed]:hidden">
             <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
             <Input
@@ -177,22 +180,24 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center justify-between gap-2 group-data-[state=collapsed]:justify-center">
-          <span className="text-muted-foreground text-xs group-data-[state=collapsed]:hidden">
-            Chats are stored in this browser
-          </span>
-          <ModeToggle className="size-8 shrink-0" />
-        </div>
+        {/* The theme toggle lives in the header; a second one here gave the app
+            two controls with the same accessible name. */}
+        <p className="text-muted-foreground px-2 text-xs group-data-[state=collapsed]:hidden">
+          Chats are stored in this browser
+        </p>
       </SidebarFooter>
 
-      <RenameConversationDialog
-        open={conversationToRename !== null}
-        initialTitle={conversationTitle(conversationToRename ?? undefined)}
-        onOpenChange={(open) => {
-          if (!open) setConversationToRename(null)
-        }}
-        onSubmit={handleRenameSubmit}
-      />
+      {conversationToRename && (
+        <RenameConversationDialog
+          key={conversationToRename.id}
+          open
+          initialTitle={conversationTitle(conversationToRename)}
+          onOpenChange={(open) => {
+            if (!open) setConversationToRename(null)
+          }}
+          onSubmit={handleRenameSubmit}
+        />
+      )}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent

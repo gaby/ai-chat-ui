@@ -61,6 +61,14 @@ describe('conversationUsage', () => {
     expect(assistantTurns).toBe(2)
   })
 
+  it('skips the estimate when the backend reported', () => {
+    // The estimate walks every tool payload; computing it to throw it away is
+    // what made typing lag on long conversations.
+    const { estimatedTokens } = conversationUsage([assistant('x'.repeat(400), { usage: { totalTokens: 42 } })])
+
+    expect(estimatedTokens).toBe(0)
+  })
+
   it('falls back to an estimate when nothing reported', () => {
     const { reported, estimatedTokens } = conversationUsage([user('a'.repeat(40)), assistant('b'.repeat(40))])
 
@@ -88,5 +96,14 @@ describe('formatTokens', () => {
     expect(formatTokens(1200)).toBe('1.2k')
     expect(formatTokens(12_400)).toBe('12k')
     expect(formatTokens(1_300_000)).toBe('1.3M')
+  })
+
+  it('carries into the next unit rather than rendering 1000k', () => {
+    expect(formatTokens(999_999)).toBe('1.0M')
+    expect(formatTokens(9_999)).toBe('10k')
+  })
+
+  it('does not render a non-finite count', () => {
+    expect(formatTokens(Number.NaN)).toBe('0')
   })
 })

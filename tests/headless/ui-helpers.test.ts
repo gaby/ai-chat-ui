@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { conversationTitle } from '../../src/lib/conversation-title'
 import { dateGroupLabel, groupByDate, relativeTime } from '../../src/lib/format-time'
 import { summarizeToolInput } from '../../src/lib/tool-summary'
 
@@ -23,7 +24,12 @@ describe('relativeTime', () => {
   })
 
   it('falls back to a calendar date beyond a week', () => {
-    expect(relativeTime(NOW - 10 * DAY, NOW)).toMatch(/Mar/)
+    const older = NOW - 10 * DAY
+    // Compared against the platform's own formatting rather than an English
+    // string, so the test does not depend on the runtime's default locale.
+    expect(relativeTime(older, NOW)).toBe(
+      new Date(older).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    )
   })
 })
 
@@ -69,5 +75,21 @@ describe('summarizeToolInput', () => {
     const long = summarizeToolInput({ q: 'x'.repeat(200) })
     expect(long).not.toBeNull()
     expect(long!.length).toBeLessThanOrEqual(80)
+  })
+})
+
+describe('conversationTitle', () => {
+  it('prefers the name the user gave it', () => {
+    expect(conversationTitle({ title: 'Weather research', firstMessage: 'what is the weather' })).toBe(
+      'Weather research',
+    )
+  })
+
+  it('treats a blank name or first message as absent', () => {
+    // `??` let these through, leaving every surface rendering an empty string.
+    expect(conversationTitle({ firstMessage: '' })).toBe('Untitled chat')
+    expect(conversationTitle({ firstMessage: '   ' })).toBe('Untitled chat')
+    expect(conversationTitle({ title: '  ', firstMessage: 'the opening line' })).toBe('the opening line')
+    expect(conversationTitle(undefined)).toBe('Untitled chat')
   })
 })

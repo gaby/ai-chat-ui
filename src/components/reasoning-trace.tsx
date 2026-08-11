@@ -1,4 +1,5 @@
 import { CheckIcon } from 'lucide-react'
+import { useMemo } from 'react'
 
 import { Response } from '@/components/ai-elements/response'
 import { parseReasoningSteps } from '@/lib/reasoning-steps'
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils'
  * legible before a word of it is read.
  */
 export function ReasoningTrace({ text, isStreaming }: { text: string; isStreaming: boolean }) {
-  const steps = parseReasoningSteps(text)
+  const steps = useMemo(() => parseReasoningSteps(text), [text])
   if (steps.length === 0) return null
 
   return (

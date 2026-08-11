@@ -11,6 +11,9 @@ const UNTITLED = 'Untitled chat'
 export function conversationTitle(entry: Pick<ConversationEntry, 'title' | 'firstMessage'> | undefined): string {
   const title = entry?.title?.trim()
   if (title) return title
+  // Blank counts as absent, matching the `title` branch above. `??` here let an
+  // empty first message through, so every surface rendered an empty name.
   const firstMessage = entry?.firstMessage?.trim()
-  return firstMessage ?? UNTITLED
+  if (firstMessage) return firstMessage
+  return UNTITLED
 }

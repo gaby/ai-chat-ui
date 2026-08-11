@@ -3,7 +3,12 @@ const MAX_VALUE_LENGTH = 40
 
 function formatValue(value: unknown): string | null {
   if (typeof value === 'string') {
-    const collapsed = value.replace(/\s+/g, ' ').trim()
+    // Cut first, then collapse: a 50KB `code` argument does not need a full
+    // regex scan and a full copy to yield 40 visible characters.
+    const collapsed = value
+      .slice(0, MAX_VALUE_LENGTH * 2 + 1)
+      .replace(/\s+/g, ' ')
+      .trim()
     if (collapsed === '') return null
     return collapsed.length > MAX_VALUE_LENGTH ? collapsed.slice(0, MAX_VALUE_LENGTH) + '…' : collapsed
   }

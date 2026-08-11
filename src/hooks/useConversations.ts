@@ -11,9 +11,18 @@ export function useConversations(): ConversationEntry[] {
   const [conversations, setConversations] = useState<ConversationEntry[]>([])
 
   useEffect(() => {
+    // Reads triggered by two writes in quick succession can resolve out of
+    // order; only the newest one is allowed to win, so a deleted conversation
+    // cannot reappear from an older in-flight snapshot.
+    let latest = 0
+    let cancelled = false
+
     const loadConversations = () => {
+      const request = ++latest
       getConversations()
-        .then(setConversations)
+        .then((conversations) => {
+          if (!cancelled && request === latest) setConversations(conversations)
+        })
         .catch((err: unknown) => {
           console.error('Failed to load conversations:', err)
         })
@@ -23,6 +32,7 @@ export function useConversations(): ConversationEntry[] {
     window.addEventListener('conversations-changed', loadConversations)
 
     return () => {
+      cancelled = true
       window.removeEventListener('conversations-changed', loadConversations)
     }
   }, [])

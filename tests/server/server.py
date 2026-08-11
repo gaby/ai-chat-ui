@@ -93,10 +93,16 @@ async def stream_reasoning(
     Structured the way reasoning models summarise their steps — a heading per
     step, then its body — which is what the trace timeline renders from.
     """
+    # Paced like `stream_slow`: without a gap the whole stream can arrive in one
+    # read, so the UI never observes a streaming state and reports no duration.
     yield {0: DeltaThinkingPart(content="**Understanding the question**\n")}
+    await asyncio.sleep(0.4)
     yield {0: DeltaThinkingPart(content="Working through the question step by step.\n\n")}
+    await asyncio.sleep(0.4)
     yield {0: DeltaThinkingPart(content="**Weighing the options**\n")}
+    await asyncio.sleep(0.4)
     yield {0: DeltaThinkingPart(content="The answer follows from the premise.")}
+    await asyncio.sleep(0.4)
     yield "Here is the considered answer."
 
 

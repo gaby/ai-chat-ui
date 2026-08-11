@@ -95,7 +95,7 @@ export interface ConversationUsage {
   /** How many assistant turns reported usage, out of how many there are. */
   reportedTurns: number
   assistantTurns: number
-  /** Local approximation, used when the backend reports nothing. */
+  /** Local approximation; 0 whenever `reported` is set, since it is unused then. */
   estimatedTokens: number
 }
 
@@ -113,15 +113,23 @@ export function conversationUsage(messages: UIMessage[]): ConversationUsage {
     reported = reported ? addUsage(reported, usage) : usage
   }
 
-  return { reported, reportedTurns, assistantTurns, estimatedTokens: estimateTokens(messages) }
+  // The estimate walks and stringifies every tool payload in the conversation,
+  // and this runs on every render. Only pay for it when it is the number the UI
+  // will actually show.
+  const estimatedTokens = reported ? 0 : estimateTokens(messages)
+  return { reported, reportedTurns, assistantTurns, estimatedTokens }
 }
 
 /** Compact token count: `842`, `12.4k`, `1.3M`. */
 export function formatTokens(count: number): string {
-  if (count < 1000) return String(count)
-  if (count < 1_000_000) {
-    const thousands = count / 1000
-    return `${thousands < 10 ? thousands.toFixed(1) : Math.round(thousands)}k`
+  if (!Number.isFinite(count)) return '0'
+  if (count < 1000) return String(Math.round(count))
+
+  // Round first, then pick the unit: rounding inside the branch turned 999,999
+  // into "1000k" instead of "1.0M".
+  const thousands = count / 1000
+  if (Math.round(thousands) < 1000) {
+    return `${thousands < 9.95 ? thousands.toFixed(1) : Math.round(thousands)}k`
   }
   return `${(count / 1_000_000).toFixed(1)}M`
 }

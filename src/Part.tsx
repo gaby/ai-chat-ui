@@ -1,9 +1,9 @@
 import { Response } from '@/components/ai-elements/response'
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
+import { CheckIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
 import type { ChatAddToolApproveResponseFunction, UIDataTypes, UIMessagePart, UITools, UIMessage } from 'ai'
 import { useEffect, useState } from 'react'
-import { useForkSiblings } from '@/hooks/useForkSiblings'
 import { CopyButton } from '@/components/copy-button'
+import { ForkNavigation } from '@/components/fork-navigation'
 import { MessageAction } from '@/components/message-action'
 import { MessageUsage } from '@/components/message-usage'
 import { ReasoningBlock } from '@/components/reasoning-block'
@@ -166,48 +166,4 @@ export function Part({
   } else if (part.type === 'dynamic-tool' || 'toolCallId' in part) {
     return <ToolPart part={part} onApprovalResponse={onApprovalResponse} />
   }
-}
-
-function ForkNavigation({
-  conversationId,
-  messageIndex,
-  onNavigate,
-}: {
-  conversationId: string
-  messageIndex: number
-  onNavigate: (conversationId: string) => void
-}) {
-  const { siblings, currentIndex, total } = useForkSiblings(conversationId, messageIndex)
-
-  if (total <= 1) return null
-
-  return (
-    <div className="flex items-center gap-0.5">
-      <button
-        type="button"
-        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
-        disabled={currentIndex === 0}
-        onClick={() => {
-          onNavigate(siblings[currentIndex - 1].id)
-        }}
-        aria-label="Previous fork"
-      >
-        <ChevronLeftIcon className="size-3.5" />
-      </button>
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {currentIndex + 1}/{total}
-      </span>
-      <button
-        type="button"
-        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
-        disabled={currentIndex === total - 1}
-        onClick={() => {
-          onNavigate(siblings[currentIndex + 1].id)
-        }}
-        aria-label="Next fork"
-      >
-        <ChevronRightIcon className="size-3.5" />
-      </button>
-    </div>
-  )
 }

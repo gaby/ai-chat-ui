@@ -25,17 +25,28 @@ test.describe('token usage', () => {
   test('accumulates across turns', async ({ page }) => {
     await page.goto('/')
     const summary = page.getByRole('button', { name: 'Token usage' })
+    const total = async () => {
+      // Read the exact figure from the breakdown; the chip itself is rounded.
+      await summary.click()
+      const text = await page.getByLabel('Total tokens').innerText()
+      await page.keyboard.press('Escape')
+      return Number(text.replace(/\D/g, ''))
+    }
 
     await sendMessage(page, 'text', 'First turn')
     await expect(page.getByText('Hello from the test server').first()).toBeVisible()
-    const afterFirst = await summary.innerText()
+    const afterFirst = await total()
+    expect(afterFirst).toBeGreaterThan(0)
 
     const input = page.getByPlaceholder('What would you like to know?')
     await input.fill('Second turn')
     await input.press('Enter')
     await expect(page.getByText('Hello from the test server').nth(1)).toBeVisible()
 
-    await expect(summary).not.toHaveText(afterFirst)
+    // The second reply's usage is added to the first, not swapped for it.
+    await expect
+      .poll(total, { message: 'conversation total should grow with the second turn' })
+      .toBeGreaterThan(afterFirst)
   })
 
   test('a reply reports its own input and output counts', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { CheckIcon } from 'lucide-react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 
 import { EffortBars } from '@/components/effort-bars'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -24,14 +25,9 @@ const EFFORT_DESCRIPTIONS: Record<ThinkingEffort, string> = {
   xhigh: 'Take as long as it needs',
 }
 
-function levelIndex(value: string): number {
-  const index = THINKING_EFFORT_LEVELS.indexOf(value as ThinkingEffort)
-  return index === -1 ? THINKING_EFFORT_LEVELS.indexOf('medium') : index
-}
-
 interface EffortMeterProps {
-  value: string
-  onValueChange: (value: string) => void
+  value: ThinkingEffort
+  onValueChange: (value: ThinkingEffort) => void
 }
 
 /**
@@ -42,16 +38,35 @@ interface EffortMeterProps {
  * control is even opened, and animate when it moves.
  */
 export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
-  const current = levelIndex(value)
+  const [open, setOpen] = useState(false)
+  const optionsRef = useRef<(HTMLButtonElement | null)[]>([])
+  const current = THINKING_EFFORT_LEVELS.indexOf(value)
   const level = THINKING_EFFORT_LEVELS[current]
 
+  const select = (option: ThinkingEffort) => {
+    onValueChange(option)
+    setOpen(false)
+  }
+
+  // A radiogroup has to answer the arrow keys; declaring the role without the
+  // keyboard contract would describe an interaction that does not exist.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const offsets: Record<string, number | undefined> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }
+    const offset = offsets[event.key]
+    if (offset === undefined) return
+    event.preventDefault()
+    const next = (current + offset + THINKING_EFFORT_LEVELS.length) % THINKING_EFFORT_LEVELS.length
+    onValueChange(THINKING_EFFORT_LEVELS[next])
+    optionsRef.current[next]?.focus()
+  }
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={`Thinking effort: ${EFFORT_LABELS[level]}`}
         className="text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground group flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors"
       >
-        <EffortBars level={current} total={THINKING_EFFORT_LEVELS.length} className="group-hover:opacity-90" />
+        <EffortBars level={current} className="group-hover:opacity-90" />
         {/* On a narrow screen the bars carry the meaning on their own; the
             accessible name still spells the level out. */}
         <span className="hidden sm:inline">{EFFORT_LABELS[level]}</span>
@@ -59,7 +74,7 @@ export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
 
       <PopoverContent align="start" className="w-64 p-1.5">
         <p className="text-muted-foreground px-2 py-1.5 text-xs font-medium">Thinking effort</p>
-        <div role="radiogroup" aria-label="Thinking effort">
+        <div role="radiogroup" aria-label="Thinking effort" onKeyDown={onKeyDown}>
           {THINKING_EFFORT_LEVELS.map((option, index) => {
             const selected = option === level
             return (
@@ -68,15 +83,20 @@ export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                // Roving tabindex: the group is one tab stop, arrows move within it.
+                tabIndex={selected ? 0 : -1}
+                ref={(element) => {
+                  optionsRef.current[index] = element
+                }}
                 onClick={() => {
-                  onValueChange(option)
+                  select(option)
                 }}
                 className={cn(
                   'hover:bg-accent focus-visible:ring-ring flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none',
                   selected && 'bg-accent',
                 )}
               >
-                <EffortBars level={index} total={THINKING_EFFORT_LEVELS.length} />
+                <EffortBars level={index} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm">{EFFORT_LABELS[option]}</span>
                   <span className="text-muted-foreground block text-xs">{EFFORT_DESCRIPTIONS[option]}</span>

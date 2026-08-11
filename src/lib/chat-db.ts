@@ -9,6 +9,17 @@ const MESSAGES_STORE = 'messages'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
+/**
+ * Notify every reader that the conversation store changed.
+ *
+ * Emitted from the store's own writes rather than left to callers: the sidebar,
+ * the header title and the tab title all refresh off this event, and a writer
+ * that forgot to dispatch left them stale until reload.
+ */
+function notifyConversationsChanged(): void {
+  window.dispatchEvent(new Event('conversations-changed'))
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
 
@@ -79,10 +90,41 @@ export async function saveConversation(conversation: ConversationEntry): Promise
         resolve()
       }
     })
+    notifyConversationsChanged()
   } catch (error) {
     toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
     throw error
   }
+}
+
+// Below this, a rewrite would not change what any reader displays, so the churn
+// (an IDB write plus a re-read in every subscriber) is not worth it.
+const ACTIVITY_RESOLUTION_MS = 30_000
+
+/**
+ * Record that a conversation was just used.
+ *
+ * `timestamp` is what the sidebar sorts and buckets by, and it was only ever
+ * written at creation — so a thread started weeks ago and messaged a minute ago
+ * still read "20d ago" and sorted below untouched newer ones.
+ */
+async function touchConversation(conversationId: string, at: number): Promise<void> {
+  const db = await openDatabase()
+  const existing = await new Promise<ConversationEntry | undefined>((resolve, reject) => {
+    const request = db
+      .transaction(CONVERSATIONS_STORE, 'readonly')
+      .objectStore(CONVERSATIONS_STORE)
+      .get(conversationId)
+    request.onerror = () => {
+      reject(new Error(request.error?.message ?? 'Failed to read conversation'))
+    }
+    request.onsuccess = () => {
+      resolve(request.result as ConversationEntry | undefined)
+    }
+  })
+
+  if (!existing || at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return
+  await saveConversation({ ...existing, timestamp: at })
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
@@ -97,6 +139,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
     msgStore.delete(conversationId)
 
     tx.oncomplete = () => {
+      notifyConversationsChanged()
       resolve()
     }
     tx.onerror = () => {
@@ -138,6 +181,7 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
         resolve()
       }
     })
+    await touchConversation(conversationId, Date.now())
   } catch (error) {
     toast.error('Failed to save messages. Your browser storage may be full or unavailable.')
     throw error

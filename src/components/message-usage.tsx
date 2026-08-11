@@ -1,7 +1,7 @@
 import type { UIMessage } from 'ai'
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 
-import { conversationUsage, formatTokens } from '@/lib/usage'
+import { formatTokens, parseUsage } from '@/lib/usage'
 
 /**
  * Per-reply usage, sitting with that turn's other actions. Renders nothing
@@ -9,7 +9,7 @@ import { conversationUsage, formatTokens } from '@/lib/usage'
  * whole conversation but noise on a single line.
  */
 export function MessageUsage({ message }: { message: UIMessage }) {
-  const { reported } = conversationUsage([message])
+  const reported = parseUsage(message.metadata)
   if (!reported) return null
 
   return (

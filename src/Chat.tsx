@@ -17,16 +17,20 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalRespons
 import type { UIDataTypes, UIMessage, UIMessagePart, UITools } from 'ai'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 
+import { toast } from 'sonner'
+
 import { useQuery } from '@tanstack/react-query'
 import { useThrottle } from '@uidotdev/usehooks'
 import { nanoid } from 'nanoid'
 import { useConversationIdFromUrl } from './hooks/useConversationIdFromUrl'
 import { Part } from './Part'
+import type { ThinkingEffort } from '@/lib/generated/thinking-effort.gen'
 import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
+import { readEffort, writeEffort } from '@/lib/effort'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts } from '@/lib/tool-grouping'
 import { getMessages, saveMessages, saveConversation } from '@/lib/chat-db'
-import { stripBasePath, withBasePath } from '@/lib/base-path'
+import { stripBasePath } from '@/lib/base-path'
 
 // TODO: if just a single model, don't show model selector, just a label.
 interface RemoteConfig {
@@ -44,11 +48,7 @@ const ChatInner = () => {
   const [filtersDialogOpen, setFiltersDialogOpen] = useState(false)
   const [input, setInput] = useState('')
   const [model, setModel] = useState('')
-  const [effort, setEffort] = useState<string>(() => {
-    const stored = localStorage.getItem('effort')
-    // Empty string was the old "Default" sentinel; migrate it to an explicit level.
-    return stored && stored !== '' ? stored : 'medium'
-  })
+  const [effort, setEffort] = useState<ThinkingEffort>(() => readEffort())
   const [enabledTools, setEnabledTools] = useState<string[]>([])
   const modelRef = useRef(model)
   modelRef.current = model
@@ -68,9 +68,28 @@ const ChatInner = () => {
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     })
-  const throttledMessages = useThrottle(messages, 500)
   const [conversationId, setConversationId] = useConversationIdFromUrl()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // `stop` is not referentially stable, and the conversation-change effect must
+  // not re-run just because a new one arrived.
+  const stopRef = useRef(stop)
+  stopRef.current = stop
+
+  // Set when a send creates a conversation, so the id change it triggers is not
+  // mistaken for navigating away from one.
+  const createdHereRef = useRef<string | null>(null)
+
+  // Which conversation the mounted messages belong to — '/' for a new chat,
+  // null while a stored one is still being read.
+  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(conversationId === '/' ? '/' : null)
+
+  // Snapshots are tagged with the conversation the messages belong to, not with
+  // `conversationId` — that runs ahead of the messages while a switch is in
+  // flight, and keying the save off it wrote one conversation's history into
+  // another.
+  const snapshot = useMemo(() => ({ id: loadedConversationId, messages }), [loadedConversationId, messages])
+  const throttled = useThrottle(snapshot, 500)
 
   // Edit state
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
@@ -87,30 +106,62 @@ const ChatInner = () => {
   })
 
   useEffect(() => {
-    if (configQuery.data) {
-      setModel(configQuery.data.models[0].id)
+    // A backend with no providers configured returns an empty list; the composer
+    // degrades to a disabled model select rather than the chat crashing here.
+    const firstModel = configQuery.data?.models[0]
+    if (firstModel) {
+      setModel(firstModel.id)
     }
   }, [configQuery.data])
 
+  // Builtin tools are advertised per model, so a tool enabled on one model must
+  // not keep riding along on a model that does not offer it — the chip that
+  // would switch it off is gone from the toolbar by then.
+  useEffect(() => {
+    const allowed = configQuery.data?.models.find((entry) => entry.id === model)?.builtinTools ?? []
+    setEnabledTools((prev) => {
+      const next = prev.filter((id) => allowed.includes(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [configQuery.data, model])
+
   useEffect(() => {
     setEditingMessageId(null)
-    if (conversationId === '/') {
-      setMessages([])
-    } else {
+
+    // The conversation this session just created: the messages already in
+    // memory are its own, and a run is streaming into it. Neither clear nor
+    // stop applies.
+    if (createdHereRef.current === conversationId) {
+      createdHereRef.current = null
+      setLoadedConversationId(conversationId)
+      return
+    }
+
+    // Abandon any run still streaming into the conversation we are leaving.
+    // Without this the SDK keeps appending its chunks, and they land in
+    // whichever conversation is now on screen.
+    void stopRef.current()
+    // Clear first either way: leaving the old messages mounted while the read is
+    // in flight shows the previous conversation under this one's title, and the
+    // save effect would then persist them under this id.
+    setMessages([])
+    setLoadedConversationId(conversationId === '/' ? '/' : null)
+
+    if (conversationId !== '/') {
       getMessages(conversationId)
         .then((storedMessages) => {
-          if (storedMessages) {
-            setMessages(storedMessages)
+          setMessages(storedMessages ?? [])
+          setLoadedConversationId(conversationId)
 
-            // Auto-send pending fork message after loading forked conversation
-            // Uses deferred send to ensure setMessages is committed first
-            if (pendingSendRef.current) {
-              setSendTrigger((n) => n + 1)
-            }
+          // Auto-send pending fork message after loading forked conversation
+          // Uses deferred send to ensure setMessages is committed first
+          if (pendingSendRef.current) {
+            setSendTrigger((n) => n + 1)
           }
         })
         .catch((err: unknown) => {
           console.error('Failed to load messages:', err)
+          toast.error('Failed to load this conversation from browser storage.')
         })
     }
     textareaRef.current?.focus()
@@ -118,25 +169,36 @@ const ChatInner = () => {
 
   const handleSubmit = (e: SyntheticEvent) => {
     e.preventDefault()
-    if (input.trim()) {
-      const theCurrentUrl = new URL(window.location.toString())
+    if (!input.trim()) return
 
-      // we're starting a new conversation
-      if (stripBasePath(theCurrentUrl.pathname) === '/') {
-        const newConversationId = `/${nanoid()}`
-        setConversationId(newConversationId)
-
-        saveConversationEntry(newConversationId, input)
-
-        theCurrentUrl.pathname = withBasePath(newConversationId)
-        window.history.pushState({}, '', theCurrentUrl.toString())
-      }
-
-      sendMessage({ text: input }).catch((error: unknown) => {
-        console.error('Error sending message:', error)
-      })
-      setInput('')
+    // we're starting a new conversation
+    if (stripBasePath(window.location.pathname) === '/') {
+      const newConversationId = `/${nanoid()}`
+      createdHereRef.current = newConversationId
+      // `setConversationId` pushes the URL itself; pushing again here left two
+      // identical history entries, so Back appeared to do nothing.
+      setConversationId(newConversationId)
+      saveConversationEntry(newConversationId, input)
     }
+
+    // A run stopped mid tool-call leaves a tool part with no output, and
+    // pydantic-ai rejects an orphaned tool call — same cleanup `handleContinue`
+    // does, which the plain send path was missing.
+    const lastMessage = messages.at(-1)
+    if (lastMessage?.role === 'assistant' && hasIncompleteToolPart(lastMessage.parts)) {
+      pendingSendRef.current = { text: input, model, builtinTools: enabledTools }
+      setMessages(messages.slice(0, -1))
+      setTimeout(() => {
+        setSendTrigger((n) => n + 1)
+      }, 0)
+      setInput('')
+      return
+    }
+
+    sendMessage({ text: input }).catch((error: unknown) => {
+      console.error('Error sending message:', error)
+    })
+    setInput('')
   }
 
   // Fires deferred sendMessage after setMessages has been committed
@@ -150,12 +212,13 @@ const ChatInner = () => {
   }, [sendTrigger])
 
   useEffect(() => {
-    if (conversationId && conversationId !== '/' && throttledMessages.length > 0) {
-      saveMessages(conversationId, throttledMessages).catch((err: unknown) => {
+    const { id, messages: pending } = throttled
+    if (id !== null && id !== '/' && pending.length > 0) {
+      saveMessages(id, pending).catch((err: unknown) => {
         console.error('Failed to save messages:', err)
       })
     }
-  }, [throttledMessages, conversationId])
+  }, [throttled])
 
   const handleStartEdit = useCallback((messageId: string) => {
     setEditingMessageId(messageId)
@@ -355,7 +418,7 @@ const ChatInner = () => {
       effort={effort}
       onEffortChange={(value) => {
         setEffort(value)
-        localStorage.setItem('effort', value)
+        writeEffort(value)
       }}
       availableTools={availableTools}
       enabledTools={enabledTools}
@@ -385,19 +448,26 @@ const ChatInner = () => {
 
   // An empty chat opens as one centred column — greeting, composer, starting
   // points — rather than a blank page with the input pinned to the floor.
-  if (messages.length === 0 && status === 'ready') {
+  // Gated on the conversation having finished loading, so reopening a stored
+  // conversation does not flash the welcome screen before its messages arrive.
+  if (messages.length === 0 && status === 'ready' && loadedConversationId === conversationId) {
     return (
       <>
-        <div className="flex flex-1 items-center justify-center overflow-y-auto px-3 py-8">
-          <WelcomeScreen
-            onSelect={handleSuggestion}
-            composer={
-              <>
-                {configBanner}
-                {renderComposer(false)}
-              </>
-            }
-          />
+        {/* `my-auto` rather than `items-center`: a centred flex child cannot be
+            scrolled back to once it overflows, which clipped the heading on
+            short viewports. */}
+        <div className="flex flex-1 flex-col overflow-y-auto px-3 py-8">
+          <div className="my-auto w-full">
+            <WelcomeScreen
+              onSelect={handleSuggestion}
+              composer={
+                <>
+                  {configBanner}
+                  {renderComposer(false)}
+                </>
+              }
+            />
+          </div>
         </div>
         {dialogs}
       </>
@@ -547,9 +617,7 @@ function saveConversationEntry(newConversationId: string, firstMessage: string, 
     entry.forkOf = forkOf
   }
 
-  saveConversation(entry)
-    .then(() => window.dispatchEvent(new Event('conversations-changed')))
-    .catch((err: unknown) => {
-      console.error('Failed to save conversation:', err)
-    })
+  saveConversation(entry).catch((err: unknown) => {
+    console.error('Failed to save conversation:', err)
+  })
 }

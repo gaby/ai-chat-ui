@@ -34,6 +34,20 @@ describe('parseReasoningSteps', () => {
     ])
   })
 
+  it('keeps a fenced code block whole even when it contains a blank line', () => {
+    const steps = parseReasoningSteps('Let me compute:\n\n```python\nx = 1\n\ny = 2\n```\n\nSo it is 3.')
+
+    expect(steps).toHaveLength(3)
+    expect(steps[1].body).toBe('```python\nx = 1\n\ny = 2\n```')
+  })
+
+  it('does not treat a line with two bold spans as a heading', () => {
+    // A greedy match captured `First** we consider **second` as the title.
+    expect(parseReasoningSteps('**First** we consider **second**')).toEqual([
+      { body: '**First** we consider **second**' },
+    ])
+  })
+
   it('ignores blank input', () => {
     expect(parseReasoningSteps('')).toEqual([])
     expect(parseReasoningSteps('\n\n  \n')).toEqual([])

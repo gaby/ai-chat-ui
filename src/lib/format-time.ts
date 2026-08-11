@@ -32,9 +32,13 @@ export function relativeTime(timestamp: number, now = Date.now()): string {
   })
 }
 
+// Constructing an Intl formatter is expensive and these run per sidebar row on
+// every render; build each one once.
+const absoluteFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
 /** Full timestamp, for the tooltip behind the relative label. */
 export function absoluteTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString()
+  return absoluteFormatter.format(timestamp)
 }
 
 /**

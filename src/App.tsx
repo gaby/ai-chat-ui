@@ -17,11 +17,6 @@ export default function App() {
 
   useEffect(() => {
     migrateFromLocalStorage()
-      .then((migrated) => {
-        if (migrated) {
-          window.dispatchEvent(new Event('conversations-changed'))
-        }
-      })
       .catch((err: unknown) => {
         console.error('Migration failed:', err)
       })
@@ -33,16 +28,19 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="pydantic-chat-ui-theme">
-        <TooltipProvider delayDuration={300}>
-          <SidebarProvider defaultOpen>
-            <AppSidebar />
+        <SidebarProvider defaultOpen>
+          <AppSidebar />
 
-            <SidebarInset className="h-svh min-w-0 overflow-hidden">
+          <SidebarInset className="h-svh min-w-0 overflow-hidden">
+            {/* Nested inside SidebarProvider on purpose: that component wraps
+                its children in a TooltipProvider of its own at delayDuration 0,
+                so a provider above it would have no effect here. */}
+            <TooltipProvider delayDuration={300}>
               <AppHeader />
               <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">{ready && <Chat />}</div>
-            </SidebarInset>
-          </SidebarProvider>
-        </TooltipProvider>
+            </TooltipProvider>
+          </SidebarInset>
+        </SidebarProvider>
       </ThemeProvider>
       <Toaster richColors />
     </QueryClientProvider>

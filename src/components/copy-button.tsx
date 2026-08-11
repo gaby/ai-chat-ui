@@ -1,5 +1,6 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { MessageAction } from '@/components/message-action'
 
@@ -21,7 +22,17 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
   )
 
   const copy = () => {
-    navigator.clipboard
+    // Undefined outside a secure context — the offline artifact is meant to be
+    // served over plain http, where reading `.writeText` off it would throw
+    // synchronously, past the `.catch` below.
+    // Typed as always present, but absent outside a secure context — reading
+    // `.writeText` off it there throws synchronously, past the `.catch` below.
+    const clipboard = navigator.clipboard as Clipboard | undefined
+    if (!clipboard) {
+      toast.error('Copying needs a secure (https) connection.')
+      return
+    }
+    clipboard
       .writeText(text)
       .then(() => {
         setCopied(true)

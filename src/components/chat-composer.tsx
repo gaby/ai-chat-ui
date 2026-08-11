@@ -19,6 +19,7 @@ import { EffortMeter } from '@/components/effort-meter'
 import { ToolToggleBar } from '@/components/tool-toggle-bar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { ThinkingEffort } from '@/lib/generated/thinking-effort.gen'
 import type { BuiltinTool, ModelConfig } from '@/types'
 
 interface ChatComposerProps {
@@ -31,8 +32,8 @@ interface ChatComposerProps {
   models: ModelConfig[]
   model: string
   onModelChange: (value: string) => void
-  effort: string
-  onEffortChange: (value: string) => void
+  effort: ThinkingEffort
+  onEffortChange: (value: ThinkingEffort) => void
   availableTools: BuiltinTool[]
   enabledTools: string[]
   onToggleTool: (id: string) => void

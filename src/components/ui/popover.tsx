@@ -1,8 +1,5 @@
 import * as React from 'react'
-// local modification: the registry now imports from the umbrella `radix-ui`
-// package; every other primitive here uses the per-component package, so this
-// keeps one dependency style across the folder.
-import * as PopoverPrimitive from '@radix-ui/react-popover'
+import { Popover as PopoverPrimitive } from 'radix-ui'
 
 import { cn } from '@/lib/utils'
 

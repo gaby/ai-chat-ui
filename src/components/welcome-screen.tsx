@@ -39,7 +39,8 @@ export function WelcomeScreen({ onSelect, composer, suggestions = DEFAULT_SUGGES
   return (
     <div className="animate-fade-in mx-auto flex w-full max-w-3xl flex-col items-center px-4 text-center">
       <img src={logoSvg} alt="" className="mb-5 size-11" />
-      <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">How can I help?</h1>
+      {/* h2: the header's conversation title is the page's h1. */}
+      <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">How can I help?</h2>
       <p className="text-muted-foreground mt-2 max-w-md text-sm text-balance">
         Ask anything below. The agent can reason, call tools, and show its work as it goes.
       </p>

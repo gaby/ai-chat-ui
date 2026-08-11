@@ -6,8 +6,38 @@ export interface ReasoningStep {
 
 const HEADING_PATTERNS = [
   /^#{1,6}\s+(.+?)\s*$/, // markdown heading
-  /^\*\*(.+?)\*\*[:.]?\s*$/, // a bolded line on its own
+  // A single bolded span filling the line. `[^*]` rather than `.+?` so a line
+  // with two bold spans does not collapse into one "title" containing `**`.
+  /^\*\*([^*]+)\*\*[:.]?\s*$/,
 ]
+
+/**
+ * Split on blank lines, except inside a fenced code block — a fence with a
+ * blank line in it would otherwise be torn across two steps and rendered as two
+ * broken fences.
+ */
+function splitParagraphs(text: string): string[] {
+  const paragraphs: string[] = []
+  let current: string[] = []
+  let inFence = false
+
+  const flush = () => {
+    const paragraph = current.join('\n').trim()
+    if (paragraph !== '') paragraphs.push(paragraph)
+    current = []
+  }
+
+  for (const line of text.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
+    if (!inFence && line.trim() === '') {
+      flush()
+      continue
+    }
+    current.push(line)
+  }
+  flush()
+  return paragraphs
+}
 
 function headingOf(line: string): string | undefined {
   for (const pattern of HEADING_PATTERNS) {
@@ -26,14 +56,9 @@ function headingOf(line: string): string | undefined {
  * arriving as an undifferentiated wall of text.
  */
 export function parseReasoningSteps(text: string): ReasoningStep[] {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph !== '')
-
   const steps: ReasoningStep[] = []
 
-  for (const paragraph of paragraphs) {
+  for (const paragraph of splitParagraphs(text)) {
     const [firstLine, ...rest] = paragraph.split('\n')
     const title = headingOf(firstLine)
 

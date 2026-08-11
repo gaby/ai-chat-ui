@@ -4,14 +4,15 @@ import { GaugeIcon } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { conversationUsage, formatTokens } from '@/lib/usage'
 
-function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-6 py-1 text-sm">
-      <span className="text-muted-foreground flex items-center gap-1.5">{label}</span>
-      <span className="font-mono tabular-nums">
+      <dt className="text-muted-foreground">{label}</dt>
+      {/* Labelled so the figure is reachable on its own, by a reader or a spec,
+          without walking the DOM to find the term it belongs to. */}
+      <dd className="font-mono tabular-nums" aria-label={`${label} tokens`}>
         {value}
-        {hint && <span className="text-muted-foreground ml-1 text-xs">{hint}</span>}
-      </span>
+      </dd>
     </div>
   )
 }
@@ -47,7 +48,7 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
         <p className="mb-2 text-sm font-medium">Token usage</p>
 
         {reported ? (
-          <div className="divide-border divide-y">
+          <dl className="divide-border divide-y">
             <Row label="Input" value={reported.inputTokens.toLocaleString()} />
             <Row label="Output" value={reported.outputTokens.toLocaleString()} />
             {reported.cacheReadTokens > 0 && (
@@ -59,11 +60,11 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
             <Row label="Total" value={reported.totalTokens.toLocaleString()} />
             {reported.requests > 0 && <Row label="Model requests" value={String(reported.requests)} />}
             {reported.toolCalls > 0 && <Row label="Tool calls" value={String(reported.toolCalls)} />}
-          </div>
+          </dl>
         ) : (
-          <div className="divide-border divide-y">
+          <dl className="divide-border divide-y">
             <Row label="Estimated total" value={`~${estimatedTokens.toLocaleString()}`} />
-          </div>
+          </dl>
         )}
 
         <p className="text-muted-foreground mt-3 text-xs">

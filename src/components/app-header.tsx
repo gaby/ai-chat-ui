@@ -1,7 +1,7 @@
 import { KeyboardIcon, SquarePenIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { IS_MAC, KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
+import { KeyboardShortcutsDialog, shortcutLabel } from '@/components/keyboard-shortcuts-dialog'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -11,10 +11,6 @@ import { useConversations } from '@/hooks/useConversations'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { withBasePath } from '@/lib/base-path'
 import { conversationTitle } from '@/lib/conversation-title'
-
-const NEW_CHAT_SHORTCUT = IS_MAC ? '⇧⌘O' : 'Ctrl+Shift+O'
-const SIDEBAR_SHORTCUT = IS_MAC ? '⌘B' : 'Ctrl+B'
-const SHORTCUTS_SHORTCUT = IS_MAC ? '⌘/' : 'Ctrl+/'
 
 function startNewConversation() {
   window.history.pushState({}, '', withBasePath('/'))
@@ -60,13 +56,15 @@ export function AppHeader() {
         <TooltipTrigger asChild>
           <SidebarTrigger className="text-muted-foreground hover:text-foreground -ml-1" />
         </TooltipTrigger>
-        <TooltipContent>Toggle sidebar &middot; {SIDEBAR_SHORTCUT}</TooltipContent>
+        <TooltipContent>Toggle sidebar &middot; {shortcutLabel('toggle-sidebar')}</TooltipContent>
       </Tooltip>
 
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-sm font-medium" title={title}>
+        {/* The app's h1: without it the document outline started at h2 on any
+            open conversation. */}
+        <h1 className="truncate text-sm font-medium" title={title}>
           {title}
-        </h2>
+        </h1>
       </div>
 
       <Tooltip>
@@ -83,7 +81,7 @@ export function AppHeader() {
             <KeyboardIcon className="size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Keyboard shortcuts &middot; {SHORTCUTS_SHORTCUT}</TooltipContent>
+        <TooltipContent>Keyboard shortcuts &middot; {shortcutLabel('shortcuts')}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -98,7 +96,7 @@ export function AppHeader() {
             <SquarePenIcon className="size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>New chat &middot; {NEW_CHAT_SHORTCUT}</TooltipContent>
+        <TooltipContent>New chat &middot; {shortcutLabel('new-chat')}</TooltipContent>
       </Tooltip>
 
       <ModeToggle className="text-muted-foreground hover:text-foreground" />

@@ -4,14 +4,23 @@ export const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.in
 
 const MOD = IS_MAC ? '⌘' : 'Ctrl'
 
-export const SHORTCUTS: { keys: string[]; description: string }[] = [
-  { keys: [MOD, 'Shift', 'O'], description: 'New chat' },
-  { keys: [MOD, 'B'], description: 'Toggle sidebar' },
-  { keys: [MOD, '/'], description: 'Show this list' },
-  { keys: ['Enter'], description: 'Send message' },
-  { keys: ['Shift', 'Enter'], description: 'New line in the composer' },
-  { keys: ['Esc'], description: 'Cancel an edit' },
-]
+export const SHORTCUTS = [
+  { id: 'new-chat', keys: [MOD, 'Shift', 'O'], description: 'New chat' },
+  { id: 'toggle-sidebar', keys: [MOD, 'B'], description: 'Toggle sidebar' },
+  { id: 'shortcuts', keys: [MOD, '/'], description: 'Show this list' },
+  { id: 'send', keys: ['Enter'], description: 'Send message' },
+  { id: 'newline', keys: ['Shift', 'Enter'], description: 'New line in the composer' },
+  { id: 'cancel-edit', keys: ['Esc'], description: 'Cancel an edit' },
+] as const
+
+/**
+ * The same binding spelled for a tooltip. One table behind both surfaces, so
+ * the help dialog cannot advertise a shortcut the tooltip contradicts.
+ */
+export function shortcutLabel(id: (typeof SHORTCUTS)[number]['id']): string {
+  const shortcut = SHORTCUTS.find((entry) => entry.id === id)
+  return shortcut ? shortcut.keys.join(IS_MAC ? '' : '+') : ''
+}
 
 interface KeyboardShortcutsDialogProps {
   open: boolean
