@@ -3,13 +3,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 export const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
 
 const MOD = IS_MAC ? '⌘' : 'Ctrl'
+const SHIFT = IS_MAC ? '⇧' : 'Shift'
 
 export const SHORTCUTS = [
-  { id: 'new-chat', keys: [MOD, 'Shift', 'O'], description: 'New chat' },
+  // macOS orders modifiers ⌃⌥⇧⌘ and writes them unseparated, so the Mac
+  // spelling is ⇧⌘O rather than ⌘ShiftO.
+  { id: 'new-chat', keys: IS_MAC ? [SHIFT, MOD, 'O'] : [MOD, SHIFT, 'O'], description: 'New chat' },
   { id: 'toggle-sidebar', keys: [MOD, 'B'], description: 'Toggle sidebar' },
   { id: 'shortcuts', keys: [MOD, '/'], description: 'Show this list' },
   { id: 'send', keys: ['Enter'], description: 'Send message' },
-  { id: 'newline', keys: ['Shift', 'Enter'], description: 'New line in the composer' },
+  { id: 'newline', keys: [SHIFT, 'Enter'], description: 'New line in the composer' },
   { id: 'cancel-edit', keys: ['Esc'], description: 'Cancel an edit' },
 ] as const
 

@@ -91,6 +91,19 @@ const ChatInner = () => {
   const snapshot = useMemo(() => ({ id: loadedConversationId, messages }), [loadedConversationId, messages])
   const throttled = useThrottle(snapshot, 500)
 
+  // The exact array handed to `setMessages` by a load. The save effect fires on
+  // that echo too, so without this, opening a conversation rewrote its whole
+  // history back to IndexedDB and stamped it as activity — a thread read but
+  // not replied to jumped out of "Older" to the top of the sidebar.
+  const loadedMessagesRef = useRef<UIMessage[] | null>(null)
+
+  // The conversation-change effect keys off `conversationId` alone, but has to
+  // flush what is still on screen before clearing it.
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+  const loadedIdRef = useRef(loadedConversationId)
+  loadedIdRef.current = loadedConversationId
+
   // Edit state
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const editDraftsRef = useRef(new Map<string, string>())
@@ -141,6 +154,19 @@ const ChatInner = () => {
     // Without this the SDK keeps appending its chunks, and they land in
     // whichever conversation is now on screen.
     void stopRef.current()
+
+    // Flush before clearing. `useThrottle` cancels its pending write whenever
+    // the value changes, and the clear below changes it — so leaving within
+    // 500ms of the last chunk dropped that tail, taking the reply's usage
+    // metadata with it.
+    const leavingId = loadedIdRef.current
+    const leavingMessages = messagesRef.current
+    if (leavingId !== null && leavingId !== '/' && leavingMessages.length > 0) {
+      saveMessages(leavingId, leavingMessages).catch((err: unknown) => {
+        console.error('Failed to save messages:', err)
+      })
+    }
+
     // Clear first either way: leaving the old messages mounted while the read is
     // in flight shows the previous conversation under this one's title, and the
     // save effect would then persist them under this id.
@@ -150,7 +176,9 @@ const ChatInner = () => {
     if (conversationId !== '/') {
       getMessages(conversationId)
         .then((storedMessages) => {
-          setMessages(storedMessages ?? [])
+          const loaded = storedMessages ?? []
+          loadedMessagesRef.current = loaded
+          setMessages(loaded)
           setLoadedConversationId(conversationId)
 
           // Auto-send pending fork message after loading forked conversation
@@ -195,6 +223,11 @@ const ChatInner = () => {
     // does, which the plain send path was missing.
     const lastMessage = messages.at(-1)
     if (lastMessage?.role === 'assistant' && hasIncompleteToolPart(lastMessage.parts)) {
+      // An unanswered tool call cannot be left in the history, so the whole
+      // trailing turn goes — including any prose above it. That is a lot to
+      // remove without a word, and it is easy to trigger by typing instead of
+      // answering an approval prompt.
+      toast.info('Removed the unfinished tool call so your message could be sent.')
       pendingSendRef.current = { text: input, model, builtinTools: enabledTools }
       setMessages(messages.slice(0, -1))
       setTimeout(() => {
@@ -222,6 +255,9 @@ const ChatInner = () => {
 
   useEffect(() => {
     const { id, messages: pending } = throttled
+    // Reading is not writing: the snapshot a load produced is byte-for-byte what
+    // is already stored.
+    if (pending === loadedMessagesRef.current) return
     if (id !== null && id !== '/' && pending.length > 0) {
       saveMessages(id, pending).catch((err: unknown) => {
         console.error('Failed to save messages:', err)
@@ -458,8 +494,16 @@ const ChatInner = () => {
   // An empty chat opens as one centred column — greeting, composer, starting
   // points — rather than a blank page with the input pinned to the floor.
   // Gated on the conversation having finished loading, so reopening a stored
-  // conversation does not flash the welcome screen before its messages arrive.
-  if (messages.length === 0 && status === 'ready' && loadedConversationId === conversationId) {
+  // conversation does not flash the welcome screen before its messages arrive,
+  // and on no send being queued: retrying, or modifying the first message,
+  // empties `messages` for a frame on its way to re-sending it, which otherwise
+  // threw up the greeting and remounted the composer under the caret.
+  if (
+    messages.length === 0 &&
+    status === 'ready' &&
+    loadedConversationId === conversationId &&
+    pendingSendRef.current === null
+  ) {
     return (
       <>
         {/* `my-auto` rather than `items-center`: a centred flex child cannot be

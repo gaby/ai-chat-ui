@@ -1,5 +1,6 @@
 import { GitBranchIcon, MessageSquareIcon, PinIcon } from 'lucide-react'
 import type React from 'react'
+import { useEffect, useState } from 'react'
 
 import { ConversationMenu } from '@/components/conversation-menu'
 import {
@@ -37,6 +38,8 @@ export function ConversationList({
   onTogglePin,
   onDelete,
 }: ConversationListProps) {
+  useMinuteTick()
+
   const pinned = conversations.filter((entry) => entry.pinned)
   const rest = conversations.filter((entry) => !entry.pinned)
   const groups: DateGroup<ConversationEntry>[] = [
@@ -85,6 +88,25 @@ export function ConversationList({
       ))}
     </>
   )
+}
+
+/**
+ * Re-render once a minute so the times stay true.
+ *
+ * These labels are read off the clock at render, and nothing else re-renders
+ * this list while the app sits open — so a row read "Just now" hours later, and
+ * kept yesterday's heading past midnight.
+ */
+function useMinuteTick(): void {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTick((n) => n + 1)
+    }, 60_000)
+    return () => {
+      clearInterval(id)
+    }
+  }, [])
 }
 
 function ConversationIcon({ conversation }: { conversation: ConversationEntry }) {

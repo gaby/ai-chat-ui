@@ -110,21 +110,32 @@ const ACTIVITY_RESOLUTION_MS = 30_000
  */
 async function touchConversation(conversationId: string, at: number): Promise<void> {
   const db = await openDatabase()
-  const existing = await new Promise<ConversationEntry | undefined>((resolve, reject) => {
-    const request = db
-      .transaction(CONVERSATIONS_STORE, 'readonly')
-      .objectStore(CONVERSATIONS_STORE)
-      .get(conversationId)
-    request.onerror = () => {
-      reject(new Error(request.error?.message ?? 'Failed to read conversation'))
+
+  // Read and write in one `readwrite` transaction. Split across two, a rename or
+  // a pin landing in between would be read before the change and written back
+  // after it, silently reverting what the user just did — and a run bumps this
+  // every 30s, so the window is not hypothetical.
+  const touched = await new Promise<boolean>((resolve, reject) => {
+    const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+    const store = tx.objectStore(CONVERSATIONS_STORE)
+    const read = store.get(conversationId)
+    let wrote = false
+
+    read.onsuccess = () => {
+      const existing = read.result as ConversationEntry | undefined
+      if (!existing || at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return
+      store.put({ ...existing, timestamp: at })
+      wrote = true
     }
-    request.onsuccess = () => {
-      resolve(request.result as ConversationEntry | undefined)
+    tx.oncomplete = () => {
+      resolve(wrote)
+    }
+    tx.onerror = () => {
+      reject(new Error(tx.error?.message ?? 'Failed to record conversation activity'))
     }
   })
 
-  if (!existing || at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return
-  await saveConversation({ ...existing, timestamp: at })
+  if (touched) notifyConversationsChanged()
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
@@ -195,10 +206,19 @@ export async function saveMessages(
         resolve()
       }
     })
-    if (touch) await touchConversation(conversationId, Date.now())
   } catch (error) {
     toast.error('Failed to save messages. Your browser storage may be full or unavailable.')
     throw error
+  }
+
+  // Outside the try on purpose: the history is already committed by here, so a
+  // failure to stamp the activity is a stale sidebar timestamp, not lost
+  // messages. Reporting it as "your browser storage may be full" and rejecting
+  // the save would be wrong on both counts.
+  if (touch) {
+    await touchConversation(conversationId, Date.now()).catch((error: unknown) => {
+      console.error('Failed to record conversation activity:', error)
+    })
   }
 }
 

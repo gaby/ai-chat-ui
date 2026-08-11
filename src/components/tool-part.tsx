@@ -79,13 +79,18 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
       <CollapsibleContent>
         {open && (
           <>
-            {isRunCode ? (
-              <RunCodeInput input={part.input} />
-            ) : (
-              <ToolSection label="Arguments" copyText={inputText} contentClassName="bg-muted/40">
-                <ToolOutputCode output={part.input} />
-              </ToolSection>
-            )}
+            {/* A call still streaming its input has none yet, and
+                `JSON.stringify(undefined)` is not a string — the band rendered
+                empty with a Copy button that put the word "undefined" on the
+                clipboard. */}
+            {part.input !== undefined &&
+              (isRunCode ? (
+                <RunCodeInput input={part.input} />
+              ) : (
+                <ToolSection label="Arguments" copyText={inputText} contentClassName="bg-muted/40">
+                  <ToolOutputCode output={part.input} />
+                </ToolSection>
+              ))}
 
             {approval && (
               <ToolApprovalPrompt

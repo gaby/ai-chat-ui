@@ -10,7 +10,16 @@ interface ToolApprovalPromptProps {
   onApprovalResponse: ChatAddToolApproveResponseFunction
 }
 
-const RESOLVED_STATES: ToolUIPart['state'][] = ['approval-responded', 'output-available', 'output-denied']
+// Every state a decided approval can be sitting in. `output-error` belongs here
+// too: an approved tool that then fails still carries `approval.approved`, and
+// leaving it out made the record of the decision vanish at exactly the moment
+// someone would go looking for who let the call through.
+const RESOLVED_STATES: ToolUIPart['state'][] = [
+  'approval-responded',
+  'output-available',
+  'output-error',
+  'output-denied',
+]
 
 /**
  * The gate in front of a tool that needs a human decision.
@@ -67,7 +76,7 @@ export function ToolApprovalPrompt({ approval, toolName, state, onApprovalRespon
   return approval.approved ? (
     <p className="text-muted-foreground flex items-center gap-1.5 border-t px-3 py-2 text-xs">
       <ShieldCheckIcon className="text-primary size-3.5 shrink-0" />
-      Approved. Executing tool.
+      {state === 'approval-responded' ? 'Approved. Executing tool…' : 'Approved by you.'}
     </p>
   ) : (
     <p className="text-muted-foreground flex items-center gap-1.5 border-t px-3 py-2 text-xs">

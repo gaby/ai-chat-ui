@@ -42,6 +42,12 @@ def send_email(to: str, body: str) -> str:
     return f"Email sent to {to}"
 
 
+@agent.tool_plain(requires_approval=True)
+def delete_records(table: str) -> str:
+    """Delete rows from a table, failing after approval was granted."""
+    raise ModelRetry(f"Table {table!r} is locked")
+
+
 @agent.tool_plain
 def run_code(code: str, restart: bool = False) -> dict[str, object]:
     """Run a snippet of Python code."""
@@ -236,6 +242,24 @@ async def stream_approval(
     }
 
 
+async def stream_approval_error(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """An approved tool that then fails — the card has to hold both facts."""
+    if _has_retry_prompt(messages):
+        yield "The rows could not be deleted."
+        return
+    if _has_tool_return_for(messages, "delete_records"):
+        yield "Nothing was deleted."
+        return
+    yield {
+        0: DeltaToolCall(
+            name="delete_records",
+            json_args=json.dumps({"table": "archive"}),
+        )
+    }
+
+
 async def stream_repeated_approval(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -265,6 +289,7 @@ models: dict[str, object] = {
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),
     "error": FunctionModel(stream_function=stream_error),
     "approval": FunctionModel(stream_function=stream_approval),
+    "approval-error": FunctionModel(stream_function=stream_approval_error),
     "repeated-approval": FunctionModel(stream_function=stream_repeated_approval),
     "run-code": FunctionModel(stream_function=stream_run_code),
     "large-output": FunctionModel(stream_function=stream_large_output),

@@ -20,9 +20,24 @@ test.describe('tool approval', () => {
 
     await card.getByRole('button', { name: 'Approve' }).click()
 
-    await expect(card.getByText('Approved. Executing tool.')).toBeVisible()
+    await expect(card.getByText('Approved by you.')).toBeVisible()
     await expect(card.getByText('Completed')).toBeVisible()
     await expect(page.getByText('The email has been sent successfully.')).toBeVisible()
+  })
+
+  test('keeps the record of the decision when the approved tool fails', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'approval-error', 'Delete the archive rows')
+
+    const card = toolCard(page, 'delete_records')
+    await expect(card.getByText('This tool requires your approval to run')).toBeVisible()
+
+    await card.getByRole('button', { name: 'Approve' }).click()
+
+    await expect(card.getByRole('heading', { name: 'Error' })).toBeVisible()
+    await expect(card.getByText("Table 'archive' is locked").first()).toBeVisible()
+    // The failure does not erase who let the call through.
+    await expect(card.getByText('Approved by you.')).toBeVisible()
   })
 
   test('deny shows the rejected state and does not execute the tool', async ({ page }) => {

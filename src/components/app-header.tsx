@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
-import { useConversations } from '@/hooks/useConversations'
+import { useConversationsState } from '@/hooks/useConversations'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { withBasePath } from '@/lib/base-path'
 import { conversationTitle } from '@/lib/conversation-title'
@@ -24,24 +24,33 @@ function startNewConversation() {
  */
 export function AppHeader() {
   const [conversationId] = useConversationIdFromUrl()
-  const conversations = useConversations()
+  const { conversations, loaded } = useConversationsState()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   const current = conversations.find((entry) => entry.id === conversationId)
   const isNew = conversationId === '/'
-  const title = isNew ? 'New chat' : conversationTitle(current)
+  // Until the store has been read there is no entry to find, which is not the
+  // same as the conversation having no name — resolving it early flashed
+  // "Untitled chat" in the header and the tab on every reload.
+  const title = isNew ? 'New chat' : loaded ? conversationTitle(current) : ''
 
-  useDocumentTitle(isNew ? null : title)
+  useDocumentTitle(isNew || !loaded ? null : title)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
+      // A modal owns the keyboard while it is up. Navigating out from under an
+      // open dialog left it mounted over a conversation it no longer belonged
+      // to, still holding a half-typed rename.
+      const modalOpen = document.querySelector('[role="dialog"][data-state="open"]') !== null
       if (event.shiftKey && event.key.toLowerCase() === 'o') {
+        if (modalOpen) return
         event.preventDefault()
         startNewConversation()
       } else if (event.key === '/') {
         event.preventDefault()
-        setShortcutsOpen((open) => !open)
+        // Still closes its own dialog; it just cannot open on top of another.
+        setShortcutsOpen((open) => (open ? false : !modalOpen))
       }
     }
     window.addEventListener('keydown', onKeyDown)

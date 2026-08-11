@@ -28,6 +28,12 @@ function Row({ label, value }: { label: string; value: string }) {
 export function UsageSummary({ messages }: { messages: UIMessage[] }) {
   const { reported, reportedTurns, assistantTurns, estimatedTokens } = conversationUsage(messages)
   const isEstimate = reported === null
+  // Some replies reporting and others not is normal — a conversation carried
+  // over from before the backend reported usage, or a turn served by a model
+  // that does not. Summing only the turns that answered and printing it as the
+  // conversation total reads as exact while undercounting, so it gets the same
+  // `~` an estimate does.
+  const isPartial = reported !== null && reportedTurns < assistantTurns
   const total = reported ? reported.totalTokens : estimatedTokens
 
   if (total === 0) return null
@@ -40,7 +46,7 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
       >
         <GaugeIcon className="size-3.5" />
         <span className="tabular-nums">
-          {isEstimate && '~'}
+          {(isEstimate || isPartial) && '~'}
           {formatTokens(total)} tokens
         </span>
       </PopoverTrigger>
@@ -57,7 +63,10 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
             {reported.cacheWriteTokens > 0 && (
               <Row label="Cached write" value={reported.cacheWriteTokens.toLocaleString()} />
             )}
-            <Row label="Total" value={reported.totalTokens.toLocaleString()} />
+            <Row
+              label={isPartial ? 'Total reported' : 'Total'}
+              value={`${isPartial ? '~' : ''}${reported.totalTokens.toLocaleString()}`}
+            />
             {reported.requests > 0 && <Row label="Model requests" value={String(reported.requests)} />}
             {reported.toolCalls > 0 && <Row label="Tool calls" value={String(reported.toolCalls)} />}
           </dl>

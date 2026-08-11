@@ -69,8 +69,22 @@ function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   }
 }
 
+/**
+ * Per-message character counts, keyed by the parts array that produced them.
+ *
+ * The estimate runs on every render, and a render happens on every streamed
+ * chunk — so without this, a long conversation re-stringified every historical
+ * tool payload hundreds of times over a single reply. A part array is replaced
+ * whenever its message changes, which makes identity a sound cache key and
+ * leaves invalidation to the garbage collector.
+ */
+const characterCache = new WeakMap<object, number>()
+
 /** Every character the model saw or produced, as far as the client can tell. */
 function messageCharacters(message: UIMessage): number {
+  const cached = characterCache.get(message.parts)
+  if (cached !== undefined) return cached
+
   let characters = 0
   for (const part of message.parts) {
     if (part.type === 'text' || part.type === 'reasoning') {
@@ -81,6 +95,8 @@ function messageCharacters(message: UIMessage): number {
       if (tool.output !== undefined) characters += JSON.stringify(tool.output).length
     }
   }
+
+  characterCache.set(message.parts, characters)
   return characters
 }
 
