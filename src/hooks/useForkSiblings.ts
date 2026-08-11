@@ -37,11 +37,14 @@ function computeSiblings(
   }
 
   const parent = conversations.find((c) => c.id === parentId)
+  // Creation order, not activity order: `timestamp` moves every time a fork is
+  // used, so sorting by it made the "2/3" indicator (and what Previous/Next
+  // reach) shuffle under the reader as they chatted.
   const children = conversations
     .filter((c) => c.forkOf?.conversationId === parentId && c.forkOf.messageIndex === forkMessageIndex)
-    .sort((a, b) => a.timestamp - b.timestamp)
+    .sort((a, b) => (a.createdAt ?? a.timestamp) - (b.createdAt ?? b.timestamp))
 
-  // Parent is always first in the list, then children by timestamp
+  // Parent is always first in the list, then children in creation order
   const siblings = parent ? [parent, ...children] : children
   const currentIndex = siblings.findIndex((c) => c.id === conversationId)
 

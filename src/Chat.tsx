@@ -162,6 +162,10 @@ const ChatInner = () => {
         .catch((err: unknown) => {
           console.error('Failed to load messages:', err)
           toast.error('Failed to load this conversation from browser storage.')
+          // Mark it loaded anyway. Leaving it `null` looks harmless but leaves
+          // the save effect permanently disarmed, so everything sent from here
+          // on would be discarded on reload without a further word to the user.
+          setLoadedConversationId(conversationId)
         })
     }
     textareaRef.current?.focus()
@@ -170,6 +174,11 @@ const ChatInner = () => {
   const handleSubmit = (e: SyntheticEvent) => {
     e.preventDefault()
     if (!input.trim()) return
+    // The send button is swapped for a stop control mid-run, but Enter in the
+    // textarea still calls `requestSubmit()`. Without this guard a follow-up
+    // typed while a tool call is in flight would drop the streaming assistant
+    // turn below and fire a second, concurrent request.
+    if (status === 'submitted' || status === 'streaming') return
 
     // we're starting a new conversation
     if (stripBasePath(window.location.pathname) === '/') {
@@ -612,10 +621,12 @@ function saveConversationEntry(newConversationId: string, firstMessage: string, 
       ? firstMessage.slice(0, MAX_FIRST_MESSAGE_LENGTH) + '...'
       : firstMessage
 
+  const now = Date.now()
   const entry: ConversationEntry = {
     id: newConversationId,
     firstMessage: trimmedFirstMessage,
-    timestamp: Date.now(),
+    timestamp: now,
+    createdAt: now,
   }
   if (forkOf) {
     entry.forkOf = forkOf

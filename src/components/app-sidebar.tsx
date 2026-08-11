@@ -97,7 +97,12 @@ export function AppSidebar() {
 
   const handleRenameSubmit = (title: string) => {
     if (!conversationToRename) return
-    const conversation = conversationToRename
+    // Re-read the entry rather than writing back the copy captured when the
+    // menu opened: the dialog can stay open across a `conversations-changed`
+    // (an active run bumps the timestamp), and the stale copy would put the
+    // conversation back where it was in the list.
+    const id = conversationToRename.id
+    const conversation = conversations.find((entry) => entry.id === id) ?? conversationToRename
     setConversationToRename(null)
     updateConversation(conversation, { title }).catch((err: unknown) => {
       console.error('Failed to rename conversation:', err)

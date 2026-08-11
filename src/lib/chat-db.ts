@@ -166,7 +166,21 @@ export async function getMessages(conversationId: string): Promise<UIMessage[] |
   })
 }
 
-export async function saveMessages(conversationId: string, messages: UIMessage[]): Promise<void> {
+interface SaveMessagesOptions {
+  /**
+   * Whether this write counts as activity on the conversation. Off for bulk
+   * writes that replay history (the localStorage migration), which would
+   * otherwise stamp every restored conversation with the migration time and
+   * collapse the whole sidebar into "Just now".
+   */
+  touch?: boolean
+}
+
+export async function saveMessages(
+  conversationId: string,
+  messages: UIMessage[],
+  { touch = true }: SaveMessagesOptions = {},
+): Promise<void> {
   try {
     const db = await openDatabase()
     await new Promise<void>((resolve, reject) => {
@@ -181,7 +195,7 @@ export async function saveMessages(conversationId: string, messages: UIMessage[]
         resolve()
       }
     })
-    await touchConversation(conversationId, Date.now())
+    if (touch) await touchConversation(conversationId, Date.now())
   } catch (error) {
     toast.error('Failed to save messages. Your browser storage may be full or unavailable.')
     throw error
@@ -211,7 +225,8 @@ export async function migrateFromLocalStorage(): Promise<boolean> {
     if (messagesJson) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
       const messages: UIMessage[] = JSON.parse(messagesJson)
-      await saveMessages(conv.id, messages)
+      // Restoring history is not activity: keep each conversation's own timestamp.
+      await saveMessages(conv.id, messages, { touch: false })
       migratedKeys.push(conv.id)
     }
   }

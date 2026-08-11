@@ -28,10 +28,13 @@ export function ChatError({
   const [detailsOpen, setDetailsOpen] = useState(false)
   const trimmed = message.trim()
   const firstLine = trimmed.split('\n')[0]
-  const hasMore = trimmed.length > firstLine.length
   // Only ellipsize when the first line itself was cut — appending one to a
   // sentence that already ended read as "Unavailable....".
   const summary = firstLine.length > SUMMARY_LENGTH ? firstLine.slice(0, SUMMARY_LENGTH).trimEnd() + '…' : firstLine
+  // Compared against the summary, not the first line: a long single-line
+  // provider dump has no newline to give it away, and keying off the line
+  // alone hid Details on exactly the errors that needed it.
+  const hasMore = trimmed !== summary
 
   return (
     <div
