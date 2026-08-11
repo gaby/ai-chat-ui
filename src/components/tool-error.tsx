@@ -9,8 +9,13 @@ import { ToolSection } from '@/components/tool-section'
  */
 export function ToolError({ errorText }: { errorText: string }) {
   return (
-    <ToolSection label="Error" copyText={errorText} className="border-destructive/20 bg-destructive/5">
-      <pre className="text-destructive max-h-64 overflow-auto font-mono text-xs break-words whitespace-pre-wrap">
+    <ToolSection
+      label="Error"
+      copyText={errorText}
+      className="border-destructive/20 bg-destructive/5"
+      contentClassName="bg-destructive/5"
+    >
+      <pre className="text-destructive max-h-64 overflow-auto p-2 pr-9 font-mono text-xs break-words whitespace-pre-wrap">
         {errorText}
       </pre>
     </ToolSection>

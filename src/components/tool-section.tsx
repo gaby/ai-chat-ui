@@ -9,6 +9,8 @@ interface ToolSectionProps {
   copyText?: string
   children: ReactNode
   className?: string
+  /** Extra classes for the content box the copy action sits in. */
+  contentClassName?: string
 }
 
 /**
@@ -16,20 +18,22 @@ interface ToolSectionProps {
  *
  * The label is what lets a reader skim a long agent run without parsing JSON,
  * and each band carries its own copy action because the thing people do with a
- * tool payload is take it somewhere else.
+ * tool payload is take it somewhere else. The action sits in the corner of the
+ * content it copies, the way a code block's does, rather than floating above
+ * next to the label where it is ambiguous which block it belongs to.
  */
-export function ToolSection({ label, copyText, children, className }: ToolSectionProps) {
+export function ToolSection({ label, copyText, children, className, contentClassName }: ToolSectionProps) {
   return (
-    <section className={cn('group/section border-t px-3 py-2.5', className)}>
-      <div className="mb-1.5 flex h-6 items-center justify-between gap-2">
-        <h4 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</h4>
+    <section className={cn('border-t px-3 py-2.5', className)}>
+      <h4 className="text-muted-foreground mb-1.5 text-xs font-medium tracking-wide uppercase">{label}</h4>
+      <div className={cn('group/content relative overflow-hidden rounded-md', contentClassName)}>
         {copyText && (
-          <span className="opacity-0 transition-opacity group-hover/section:opacity-100 focus-within:opacity-100">
+          <div className="absolute top-1 right-1 z-10 opacity-0 transition-opacity group-hover/content:opacity-100 focus-within:opacity-100">
             <CopyButton text={copyText} label={`Copy ${label.toLowerCase()}`} />
-          </span>
+          </div>
         )}
+        {children}
       </div>
-      {children}
     </section>
   )
 }

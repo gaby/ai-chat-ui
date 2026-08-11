@@ -139,7 +139,9 @@ export function Part({
     // and tables in the same turn then share one column and one measure.
     return (
       <div>
-        <Response className="text-[0.9375rem] leading-7">{part.text}</Response>
+        {/* `h-auto` overrides the vendored Response's `size-full`, which stretched
+            inside this flex column and pushed the actions row out of the turn. */}
+        <Response className="h-auto text-[0.9375rem] leading-7">{part.text}</Response>
         {index === message.parts.length - 1 && (
           <div className="mt-1 flex items-center gap-0.5">
             <CopyButton text={part.text} label="Copy response" />

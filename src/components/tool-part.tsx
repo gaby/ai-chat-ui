@@ -82,10 +82,8 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
             {isRunCode ? (
               <RunCodeInput input={part.input} />
             ) : (
-              <ToolSection label="Arguments" copyText={inputText}>
-                <div className="bg-muted/40 overflow-hidden rounded-md">
-                  <ToolOutputCode output={part.input} />
-                </div>
+              <ToolSection label="Arguments" copyText={inputText} contentClassName="bg-muted/40">
+                <ToolOutputCode output={part.input} />
               </ToolSection>
             )}
 
@@ -106,10 +104,12 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
                 <RunCodeOutput output={part.output} />
               ) : (
                 part.output !== undefined && (
-                  <ToolSection label="Result" copyText={stringify(part.output)}>
-                    <div className="bg-muted/40 overflow-x-auto rounded-md [&_table]:w-full">
-                      <ToolOutputCode output={part.output} />
-                    </div>
+                  <ToolSection
+                    label="Result"
+                    copyText={stringify(part.output)}
+                    contentClassName="bg-muted/40 overflow-x-auto [&_table]:w-full"
+                  >
+                    <ToolOutputCode output={part.output} />
                   </ToolSection>
                 )
               ))}

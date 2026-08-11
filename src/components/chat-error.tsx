@@ -55,9 +55,6 @@ export function ChatError({
               <ArrowRightIcon className="size-3.5" />
               Continue
             </Button>
-            <span className="ml-auto">
-              <CopyButton text={trimmed} label="Copy error" />
-            </span>
           </div>
         </div>
       </div>
@@ -69,9 +66,14 @@ export function ChatError({
             Details
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <pre className="text-muted-foreground max-h-64 overflow-auto border-t px-4 py-3 font-mono text-xs break-words whitespace-pre-wrap">
-              {trimmed}
-            </pre>
+            <div className="group/details relative border-t">
+              <div className="absolute top-1.5 right-2 z-10 opacity-0 transition-opacity group-hover/details:opacity-100 focus-within:opacity-100">
+                <CopyButton text={trimmed} label="Copy error" />
+              </div>
+              <pre className="text-muted-foreground max-h-64 overflow-auto px-4 py-3 pr-11 font-mono text-xs break-words whitespace-pre-wrap">
+                {trimmed}
+              </pre>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       )}
