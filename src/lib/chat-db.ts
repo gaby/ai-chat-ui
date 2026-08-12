@@ -156,6 +156,49 @@ export async function patchConversation(
   }
 }
 
+/**
+ * Write a conversation entry only if the id does not have one yet.
+ *
+ * A URL with no conversation behind it — a bookmark to a chat cleared from this
+ * browser, or a mistyped id — used to open as an empty chat that accepted
+ * messages, and those messages were then stored under an id the sidebar had
+ * never heard of: the conversation vanished the moment it was navigated away
+ * from. Sending there now gives it an entry.
+ *
+ * Insert-only, and in one transaction, so it cannot overwrite the title, pin or
+ * activity stamp of a conversation that does exist.
+ */
+export async function ensureConversationEntry(conversation: ConversationEntry): Promise<void> {
+  if (deletedConversations.has(conversation.id)) return
+
+  try {
+    const db = await openDatabase()
+    const inserted = await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+      const store = tx.objectStore(CONVERSATIONS_STORE)
+      const read = store.get(conversation.id)
+      let wrote = false
+
+      read.onsuccess = () => {
+        if (read.result !== undefined) return
+        store.put(conversation)
+        wrote = true
+      }
+      tx.oncomplete = () => {
+        resolve(wrote)
+      }
+      tx.onerror = () => {
+        reject(new Error(tx.error?.message ?? 'Failed to create conversation'))
+      }
+    })
+
+    if (inserted) notifyConversationsChanged()
+  } catch (error) {
+    toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
+    throw error
+  }
+}
+
 // Below this, a rewrite would not change what any reader displays, so the churn
 // (an IDB write plus a re-read in every subscriber) is not worth it.
 const ACTIVITY_RESOLUTION_MS = 30_000

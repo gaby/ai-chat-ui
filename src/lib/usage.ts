@@ -113,14 +113,16 @@ function messageCharacters(message: UIMessage): number {
  * a turn that loops through tools is several requests rather than the one
  * counted here, so it reads low on tool-heavy turns.
  */
-export function estimateTokens(messages: UIMessage[]): number {
+export function estimateTokens(messages: UIMessage[], { skipReported = false } = {}): number {
   let sent = 0
   let characters = 0
 
   for (const message of messages) {
     const own = messageCharacters(message)
     // The request that produced this reply carried everything before it.
-    if (message.role === 'assistant') characters += sent + own
+    if (message.role === 'assistant' && !(skipReported && parseUsage(message.metadata))) {
+      characters += sent + own
+    }
     sent += own
   }
 
@@ -133,7 +135,12 @@ export interface ConversationUsage {
   /** How many assistant turns reported usage, out of how many there are. */
   reportedTurns: number
   assistantTurns: number
-  /** Local approximation; 0 whenever `reported` is set, since it is unused then. */
+  /**
+   * Local approximation of the turns nobody reported for. With none reporting
+   * that is the whole conversation; with some reporting it is the gap, which
+   * belongs on top of `reported` rather than being left out of the total. 0 once
+   * every turn has reported.
+   */
   estimatedTokens: number
 }
 
@@ -152,9 +159,11 @@ export function conversationUsage(messages: UIMessage[]): ConversationUsage {
   }
 
   // The estimate walks and stringifies every tool payload in the conversation,
-  // and this runs on every render. Only pay for it when it is the number the UI
-  // will actually show.
-  const estimatedTokens = reported ? 0 : estimateTokens(messages)
+  // and this runs on every render. Only pay for it when it is part of the number
+  // the UI will actually show — which a partial history is: summing the turns
+  // that reported and printing that as the conversation total made a long chat
+  // with one newly-reported reply read as if it had cost only that reply.
+  const estimatedTokens = reportedTurns === assistantTurns ? 0 : estimateTokens(messages, { skipReported: true })
   return { reported, reportedTurns, assistantTurns, estimatedTokens }
 }
 

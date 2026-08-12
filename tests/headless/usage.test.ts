@@ -69,6 +69,24 @@ describe('conversationUsage', () => {
     expect(estimatedTokens).toBe(0)
   })
 
+  it('estimates the turns that did not report, rather than leaving them out', () => {
+    // Opening a long conversation and getting one reported reply used to make
+    // the total collapse to that reply: everything before it was simply
+    // missing from a number presented as the conversation's cost.
+    const { reported, estimatedTokens, reportedTurns, assistantTurns } = conversationUsage([
+      user('a'.repeat(400)),
+      assistant('b'.repeat(400)),
+      user('c'.repeat(400)),
+      assistant('d'.repeat(40), { usage: { totalTokens: 42 } }),
+    ])
+
+    expect(reported?.totalTokens).toBe(42)
+    expect(reportedTurns).toBe(1)
+    expect(assistantTurns).toBe(2)
+    // The unreported turn: 400 sent + 400 produced.
+    expect(estimatedTokens).toBe(200)
+  })
+
   it('falls back to an estimate when nothing reported', () => {
     const { reported, estimatedTokens } = conversationUsage([user('a'.repeat(40)), assistant('b'.repeat(40))])
 

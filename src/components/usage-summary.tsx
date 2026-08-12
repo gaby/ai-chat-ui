@@ -34,7 +34,10 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
   // conversation total reads as exact while undercounting, so it gets the same
   // `~` an estimate does.
   const isPartial = reported !== null && reportedTurns < assistantTurns
-  const total = reported ? reported.totalTokens : estimatedTokens
+  // The unreported turns are estimated rather than dropped: a long conversation
+  // whose latest reply is the only one that reported would otherwise show that
+  // reply's few hundred tokens as the whole conversation's cost.
+  const total = reported ? reported.totalTokens + estimatedTokens : estimatedTokens
 
   if (total === 0) return null
 
@@ -63,10 +66,18 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
             {reported.cacheWriteTokens > 0 && (
               <Row label="Cached write" value={reported.cacheWriteTokens.toLocaleString()} />
             )}
-            <Row
-              label={isPartial ? 'Total reported' : 'Total'}
-              value={`${isPartial ? '~' : ''}${reported.totalTokens.toLocaleString()}`}
-            />
+            {isPartial ? (
+              <>
+                <Row label="Reported" value={reported.totalTokens.toLocaleString()} />
+                <Row
+                  label={`Estimated for ${String(assistantTurns - reportedTurns)} more`}
+                  value={`~${estimatedTokens.toLocaleString()}`}
+                />
+                <Row label="Total" value={`~${(reported.totalTokens + estimatedTokens).toLocaleString()}`} />
+              </>
+            ) : (
+              <Row label="Total" value={reported.totalTokens.toLocaleString()} />
+            )}
             {reported.requests > 0 && <Row label="Model requests" value={String(reported.requests)} />}
             {reported.toolCalls > 0 && <Row label="Tool calls" value={String(reported.toolCalls)} />}
           </dl>
@@ -79,7 +90,7 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
         <p className="text-muted-foreground mt-3 text-xs">
           {reported
             ? reportedTurns < assistantTurns
-              ? `Reported by the agent for ${reportedTurns} of ${assistantTurns} replies.`
+              ? `Reported by the agent for ${reportedTurns} of ${assistantTurns} replies; the rest estimated from their text.`
               : 'Reported by the agent.'
             : "Estimated from the conversation text — this agent doesn't report usage."}
         </p>

@@ -33,7 +33,13 @@ import { fetchConfig } from '@/lib/config'
 import { resolveSelectedModel } from '@/lib/models'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts, type PartRun } from '@/lib/tool-grouping'
-import { getMessages, isConversationDeleted, saveMessages, saveConversation } from '@/lib/chat-db'
+import {
+  ensureConversationEntry,
+  getMessages,
+  isConversationDeleted,
+  saveMessages,
+  saveConversation,
+} from '@/lib/chat-db'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
 
 // TODO: if just a single model, don't show model selector, just a label.
@@ -273,6 +279,16 @@ const ChatInner = () => {
       // identical history entries, so Back appeared to do nothing.
       setConversationId(newConversationId)
       saveConversationEntry(newConversationId, input)
+    } else if (messages.length === 0) {
+      // An id with no history behind it: a bookmark to a conversation cleared
+      // from this browser, or a mistyped URL. It opened as an empty chat and
+      // accepted messages, but nothing created an entry for it — so the reply
+      // was stored under an id the sidebar had never heard of and disappeared
+      // as soon as it was navigated away from. Insert-only, so a conversation
+      // that does exist keeps its title, pin and place in the list.
+      ensureConversationEntry(conversationEntry(conversationId, input)).catch((err: unknown) => {
+        console.error('Failed to create conversation:', err)
+      })
     }
 
     // A run stopped mid tool-call leaves a tool part with no output, and
@@ -638,7 +654,12 @@ const ChatInner = () => {
             )
           })}
 
-          {status === 'submitted' && (
+          {/* Only when there is no assistant turn to continue. Answering an
+              approval sends the run back to `submitted` with the turn still on
+              screen and already showing its own live activity, so this added a
+              second avatar and a second "Thinking" underneath it — for as long
+              as the backend took to send the next chunk. */}
+          {status === 'submitted' && messages.at(-1)?.role !== 'assistant' && (
             <AssistantTurn>
               <ThinkingIndicator />
             </AssistantTurn>
@@ -819,7 +840,11 @@ function hasIncompleteToolPart(parts: UIMessagePart<UIDataTypes, UITools>[]): bo
 // with CSS rather than relying on this.
 const MAX_FIRST_MESSAGE_LENGTH = 100
 
-function saveConversationEntry(newConversationId: string, firstMessage: string, forkOf?: ConversationEntry['forkOf']) {
+function conversationEntry(
+  newConversationId: string,
+  firstMessage: string,
+  forkOf?: ConversationEntry['forkOf'],
+): ConversationEntry {
   const trimmedFirstMessage =
     firstMessage.length > MAX_FIRST_MESSAGE_LENGTH
       ? firstMessage.slice(0, MAX_FIRST_MESSAGE_LENGTH) + '...'
@@ -835,8 +860,11 @@ function saveConversationEntry(newConversationId: string, firstMessage: string, 
   if (forkOf) {
     entry.forkOf = forkOf
   }
+  return entry
+}
 
-  saveConversation(entry).catch((err: unknown) => {
+function saveConversationEntry(newConversationId: string, firstMessage: string, forkOf?: ConversationEntry['forkOf']) {
+  saveConversation(conversationEntry(newConversationId, firstMessage, forkOf)).catch((err: unknown) => {
     console.error('Failed to save conversation:', err)
   })
 }

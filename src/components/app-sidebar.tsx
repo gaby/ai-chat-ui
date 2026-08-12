@@ -39,7 +39,10 @@ import logoSvg from '../assets/logo.svg'
 const SEARCH_THRESHOLD = 6
 
 function doLocalNavigation(e: React.MouseEvent) {
-  if (e.button !== 0 || e.metaKey || e.ctrlKey) {
+  // Every modified click the browser gives its own meaning: middle and
+  // ctrl/cmd open a tab, shift opens a window. Intercepting those would turn a
+  // deliberate "somewhere else" into a plain navigation in this tab.
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) {
     return
   }
   const path = new URL((e.currentTarget as HTMLAnchorElement).href).pathname

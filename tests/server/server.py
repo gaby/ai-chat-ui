@@ -330,6 +330,27 @@ async def stream_approval(
     }
 
 
+async def stream_approval_slow(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """An approved tool whose continuation takes a moment to answer at all.
+
+    Answering an approval puts the run back into `submitted` with the assistant
+    turn still on screen, and the gap before the response is where a second
+    avatar and a second "Thinking" used to appear underneath it. The delay lives
+    in `chat()`, which holds the whole response rather than the text inside it.
+    """
+    if _has_tool_return_for(messages, "send_email"):
+        yield "The email has been sent successfully."
+        return
+    yield {
+        0: DeltaToolCall(
+            name="send_email",
+            json_args=json.dumps({"to": "alice@example.com", "body": "Hello from the test!"}),
+        )
+    }
+
+
 async def stream_approval_error(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -382,6 +403,7 @@ models: dict[str, object] = {
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),
     "error": FunctionModel(stream_function=stream_error),
     "approval": FunctionModel(stream_function=stream_approval),
+    "approval-slow": FunctionModel(stream_function=stream_approval_slow),
     "approval-error": FunctionModel(stream_function=stream_approval_error),
     "repeated-approval": FunctionModel(stream_function=stream_repeated_approval),
     "run-code": FunctionModel(stream_function=stream_run_code),
@@ -496,7 +518,15 @@ async def chat(request: Request) -> Response:
     adapter = await UsageAdapter.from_request(request, agent=agent, sdk_version=SDK_VERSION)
     extra = adapter.run_input.__pydantic_extra__ or {}
     model_id = extra.get("model")
-    model_ref = models.get(model_id.split("::")[-1]) if model_id else None
+    name = model_id.split("::")[-1] if model_id else None
+    model_ref = models.get(name) if name else None
+    # Hold the response back, not just its first token: the adapter opens the
+    # stream immediately, which moves the client from `submitted` to `streaming`
+    # before a slow model has said anything. `submitted` is the state where the
+    # "Thinking" placeholder lives, so a spec about it needs the whole reply
+    # delayed rather than the text inside it.
+    if name == "approval-slow":
+        await asyncio.sleep(1.5)
     return await UsageAdapter.dispatch_request(
         request, agent=agent, model=model_ref, sdk_version=SDK_VERSION,
     )

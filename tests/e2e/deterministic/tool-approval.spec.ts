@@ -25,6 +25,25 @@ test.describe('tool approval', () => {
     await expect(page.getByText('The email has been sent successfully.')).toBeVisible()
   })
 
+  test('answering an approval does not add a second assistant turn', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'approval-slow', 'Send an email')
+
+    const card = toolCard(page, 'send_email')
+    await expect(card.getByRole('button', { name: 'Approve' })).toBeVisible()
+    await card.getByRole('button', { name: 'Approve' }).click()
+
+    // The continuation is `submitted` until its first chunk, and the fixture
+    // takes a couple of seconds to send one. The turn is already on screen and
+    // already showing its own live activity, so the standalone placeholder
+    // would be a second avatar and a second "Thinking" beneath it. Sampled
+    // once while the run is in flight: a retrying count would pass either way.
+    await expect(page.getByRole('button', { name: 'Stop generating' })).toBeVisible()
+    expect(await page.getByText('Thinking', { exact: true }).count()).toBe(0)
+
+    await expect(page.getByText('The email has been sent successfully.')).toBeVisible()
+  })
+
   test('keeps the record of the decision when the approved tool fails', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'approval-error', 'Delete the archive rows')

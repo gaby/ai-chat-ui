@@ -130,6 +130,25 @@ test.describe('conversation lifecycle', () => {
     await expect(sidebar(page).getByText('Enter deletes me')).toHaveCount(0)
   })
 
+  test('a URL with no conversation behind it becomes a real one when used', async ({ page }) => {
+    // A bookmark to a chat cleared from this browser, or a mistyped id. It
+    // opened as an empty chat and took messages, but nothing ever created an
+    // entry for it: the conversation was stored under an id the sidebar had
+    // never heard of and vanished as soon as it was navigated away from.
+    await page.goto('/bookmarked-elsewhere')
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+
+    await sendMessage(page, 'text', 'Still worth keeping')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+
+    await expect(sidebar(page).getByText('Still worth keeping')).toBeVisible()
+    await expect(page).toHaveURL('/bookmarked-elsewhere')
+
+    await sidebar(page).getByRole('link', { name: 'New conversation' }).click()
+    await expect(sidebar(page).getByText('Still worth keeping')).toBeVisible()
+  })
+
   test('deleting inactive conversation preserves current view', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'text', 'Keep this')
