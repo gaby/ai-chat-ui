@@ -1,6 +1,6 @@
 import { PlusIcon, SearchIcon } from 'lucide-react'
 import type React from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConversationList } from '@/components/conversation-list'
@@ -74,6 +74,7 @@ export function AppSidebar() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<ConversationEntry | null>(null)
   const [conversationToRename, setConversationToRename] = useState<ConversationEntry | null>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
 
   // The box unmounts once the list is short enough to scan; a filter left
   // behind would keep hiding rows with no input to clear it.
@@ -218,12 +219,16 @@ export function AppSidebar() {
       )}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        {/* Focus opens on Cancel, and Enter is left to whichever button holds
+            it. A dialog-wide Enter handler used to confirm the delete no matter
+            where focus was, so activating the safe control destroyed the
+            conversation. Cancel is picked explicitly rather than left to the
+            first-tabbable default, so reordering the footer cannot quietly put
+            an irreversible action under the opening keystroke. */}
         <DialogContent
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              handleConfirmDelete()
-            }
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            cancelRef.current?.focus()
           }}
         >
           <DialogHeader>
@@ -235,6 +240,7 @@ export function AppSidebar() {
           </DialogHeader>
           <DialogFooter>
             <Button
+              ref={cancelRef}
               variant="outline"
               onClick={() => {
                 setDeleteDialogOpen(false)
@@ -242,7 +248,7 @@ export function AppSidebar() {
             >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete} autoFocus>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
               Delete
             </Button>
           </DialogFooter>

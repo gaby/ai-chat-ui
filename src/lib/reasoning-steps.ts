@@ -15,11 +15,16 @@ const HEADING_PATTERNS = [
  * Split on blank lines, except inside a fenced code block — a fence with a
  * blank line in it would otherwise be torn across two steps and rendered as two
  * broken fences.
+ *
+ * The opening marker is remembered, because a fence only closes on the same
+ * character at the same width or wider. Toggling on any fence-looking line
+ * closed a ````-fenced block at the ``` example inside it, and the blank lines
+ * that followed then tore the code apart.
  */
 function splitParagraphs(text: string): string[] {
   const paragraphs: string[] = []
   let current: string[] = []
-  let inFence = false
+  let fence: { char: string; width: number } | null = null
 
   const flush = () => {
     const paragraph = current.join('\n').trim()
@@ -28,8 +33,15 @@ function splitParagraphs(text: string): string[] {
   }
 
   for (const line of text.split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence
-    if (!inFence && line.trim() === '') {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1]
+    if (marker) {
+      if (fence === null) {
+        fence = { char: marker[0], width: marker.length }
+      } else if (marker.startsWith(fence.char) && marker.length >= fence.width) {
+        fence = null
+      }
+    }
+    if (fence === null && line.trim() === '') {
       flush()
       continue
     }

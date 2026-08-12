@@ -41,6 +41,26 @@ describe('parseReasoningSteps', () => {
     expect(steps[1].body).toBe('```python\nx = 1\n\ny = 2\n```')
   })
 
+  it('closes a fence only on a matching delimiter', () => {
+    // A ````-fenced block wrapping a ``` example: toggling on any fence-looking
+    // line closed the outer block at the inner opener, and the blank lines that
+    // followed then tore the code across three steps.
+    const steps = parseReasoningSteps(
+      'Here is the file:\n\n````markdown\n```python\nx = 1\n\ny = 2\n```\n````\n\nThat is all.',
+    )
+
+    expect(steps).toHaveLength(3)
+    expect(steps[1].body).toBe('````markdown\n```python\nx = 1\n\ny = 2\n```\n````')
+    expect(steps[2].body).toBe('That is all.')
+  })
+
+  it('does not close a backtick fence on a tilde line', () => {
+    const steps = parseReasoningSteps('Compute:\n\n```python\n~~~\n\nx = 1\n```\n\nDone.')
+
+    expect(steps).toHaveLength(3)
+    expect(steps[1].body).toBe('```python\n~~~\n\nx = 1\n```')
+  })
+
   it('does not treat a line with two bold spans as a heading', () => {
     // A greedy match captured `First** we consider **second` as the title.
     expect(parseReasoningSteps('**First** we consider **second**')).toEqual([

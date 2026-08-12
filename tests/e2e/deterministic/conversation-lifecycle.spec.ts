@@ -91,6 +91,45 @@ test.describe('conversation lifecycle', () => {
     await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
   })
 
+  test('Enter on the freshly opened delete dialog does not delete', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'text', 'Spare me')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+
+    await sidebar(page).getByRole('button', { name: 'Conversation options: Spare me' }).click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+
+    // Focus opens on Cancel, and a dialog-wide Enter handler used to confirm
+    // the delete regardless — so the opening keystroke destroyed the
+    // conversation from the safe control.
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByText('Chat deleted successfully')).toHaveCount(0)
+    await expect(sidebar(page).getByText('Spare me')).toBeVisible()
+  })
+
+  test('Enter confirms once focus is on Delete', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'text', 'Enter deletes me')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+
+    await sidebar(page).getByRole('button', { name: 'Conversation options: Enter deletes me' }).click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+
+    // Dropping the dialog-wide handler must not cost the keyboard path: Enter
+    // still confirms, natively, on the button the user actually moved to.
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).focus()
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByText('Chat deleted successfully')).toBeVisible()
+    await expect(sidebar(page).getByText('Enter deletes me')).toHaveCount(0)
+  })
+
   test('deleting inactive conversation preserves current view', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'text', 'Keep this')
