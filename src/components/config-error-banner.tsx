@@ -1,6 +1,6 @@
-import { RefreshCcwIcon, WifiOffIcon } from 'lucide-react'
+import { WifiOffIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { RetryBanner } from '@/components/retry-banner'
 
 /**
  * Shown when `/api/configure` cannot be reached. Without it the composer just
@@ -9,16 +9,13 @@ import { Button } from '@/components/ui/button'
  */
 export function ConfigErrorBanner({ onRetry, isRetrying }: { onRetry: () => void; isRetrying: boolean }) {
   return (
-    <div
-      role="alert"
-      className="border-destructive/25 bg-destructive/5 mx-auto mb-2 flex w-full max-w-3xl items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+    <RetryBanner
+      icon={WifiOffIcon}
+      onRetry={onRetry}
+      disabled={isRetrying}
+      retryLabel={isRetrying ? 'Retrying' : 'Retry'}
     >
-      <WifiOffIcon className="text-destructive size-4 shrink-0" />
-      <span className="min-w-0 flex-1">Couldn&apos;t reach the agent to load models.</span>
-      <Button variant="outline" size="sm" onClick={onRetry} disabled={isRetrying}>
-        <RefreshCcwIcon className="size-3.5" />
-        {isRetrying ? 'Retrying' : 'Retry'}
-      </Button>
-    </div>
+      Couldn&apos;t reach the agent to load models.
+    </RetryBanner>
   )
 }

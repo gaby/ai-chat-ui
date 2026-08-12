@@ -1,13 +1,10 @@
 import { ChevronRightIcon, LoaderIcon, ShieldAlertIcon, SparklesIcon, XCircleIcon } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { useStreamingDisclosure } from '@/hooks/useStreamingDisclosure'
 import { COMPLETE_TOOL_STATES } from '@/lib/tool-grouping'
 import { cn } from '@/lib/utils'
-
-// Long enough to register that the work finished, short enough not to sit in
-// front of the answer.
-const AUTO_COLLAPSE_DELAY = 1000
 
 // Past this the line stops being scannable, which is the whole point of it.
 const MAX_NAMED_TOOLS = 3
@@ -52,59 +49,12 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
   // reported "Worked for 2s".
   const bare = calls.length === 0
 
-  const [open, setOpen] = useState(isStreaming)
-  const [duration, setDuration] = useState(0)
-  const startedAt = useRef<number | null>(null)
-  // Summed across streamed intervals, because a turn can stop and start again:
-  // an approval pauses it, and the continuation is a second stream. Replacing
-  // the total each time reported only the last leg — 20s of work before an
-  // approval and 2s after read as "Worked for 2s". The wait for the human is
-  // excluded, since the clock only runs between a rise and the next fall.
-  const elapsed = useRef(0)
-  const userToggled = useRef(false)
-
   const needsApproval = calls.some((call) => call.state === 'approval-requested')
   const hasError = calls.some((call) => call.state === 'output-error')
   // A decision to make or a failure to read is not something to fold away.
   const held = needsApproval || hasError
 
-  // Timing and auto-collapse key off the same transition, so they share one
-  // effect — split, the first cleared `startedAt` before the second read it.
-  useEffect(() => {
-    if (isStreaming) {
-      startedAt.current ??= Date.now()
-      setOpen(true)
-      return
-    }
-
-    // Nothing streamed here: a conversation restored from storage opens folded
-    // and stays wherever the reader puts it.
-    if (startedAt.current === null) return
-
-    elapsed.current += Date.now() - startedAt.current
-    startedAt.current = null
-    setDuration(Math.max(1, Math.round(elapsed.current / 1000)))
-
-    // Never pull it shut under someone who opened it, and never fold away a
-    // pending approval or a failure — the timer is scheduled as the stream ends,
-    // which is after both of those are already known.
-    if (userToggled.current || held) return
-    const timer = setTimeout(() => {
-      // Checked again, not just before scheduling: a second is long enough for
-      // someone to open it in the meantime, and this would shut it under them.
-      if (userToggled.current) return
-      setOpen(false)
-    }, AUTO_COLLAPSE_DELAY)
-    return () => {
-      clearTimeout(timer)
-    }
-    // Keyed on `isStreaming` alone: `held` is read at the moment the stream
-    // ends, and must not re-run the timing logic when it changes.
-  }, [isStreaming])
-
-  useEffect(() => {
-    if (held) setOpen(true)
-  }, [held])
+  const { open, onOpenChange, duration } = useStreamingDisclosure({ isStreaming, held })
 
   const running = calls.find((call) => !COMPLETE_TOOL_STATES.has(call.state))?.name
   const trail = summarize([...new Set(calls.map((call) => call.name))])
@@ -134,10 +84,7 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
     <Collapsible
       data-testid="turn-activity"
       open={bare || open}
-      onOpenChange={(next) => {
-        userToggled.current = true
-        setOpen(next)
-      }}
+      onOpenChange={onOpenChange}
       className="not-prose w-full"
     >
       {!bare && (

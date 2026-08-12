@@ -1,11 +1,11 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-export const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
+const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
 
 const MOD = IS_MAC ? '⌘' : 'Ctrl'
 const SHIFT = IS_MAC ? '⇧' : 'Shift'
 
-export const SHORTCUTS = [
+const SHORTCUTS = [
   // macOS orders modifiers ⌃⌥⇧⌘ and writes them unseparated, so the Mac
   // spelling is ⇧⌘O rather than ⌘ShiftO.
   { id: 'new-chat', keys: IS_MAC ? [SHIFT, MOD, 'O'] : [MOD, SHIFT, 'O'], description: 'New chat' },

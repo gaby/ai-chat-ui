@@ -111,10 +111,11 @@ const ChatInner = () => {
   const [pendingEdit, setPendingEdit] = useState<{ messageId: string; text: string } | null>(null)
   // Deferred send: set this ref, then call setMessages. The useEffect below
   // will fire sendMessage after the messages state has been committed.
+  // The model and tools are deliberately absent: the transport reads them from
+  // their refs at request time, so a copy taken when the send was queued would
+  // only be a second source of truth that nobody consults.
   const pendingSendRef = useRef<{
     text: string
-    model: string
-    builtinTools: string[]
     /** The conversation this was queued for; '/' means "wherever we are". */
     conversationId: string
   } | null>(null)
@@ -301,11 +302,7 @@ const ChatInner = () => {
       // remove without a word, and it is easy to trigger by typing instead of
       // answering an approval prompt.
       toast.info('Removed the unfinished tool call so your message could be sent.')
-      pendingSendRef.current = { text: input, model, builtinTools: enabledTools, conversationId }
-      setMessages(messages.slice(0, -1))
-      setTimeout(() => {
-        setSendTrigger((n) => n + 1)
-      }, 0)
+      queueSend(input, messages.length - 1)
       setInput('')
       return
     }
@@ -315,6 +312,25 @@ const ChatInner = () => {
     })
     setInput('')
   }
+
+  /**
+   * Send `text` once `messages` has been truncated to `keep` entries.
+   *
+   * The order matters and is easy to get subtly wrong by hand: the ref has to be
+   * set before `setMessages`, and the trigger bumped in a later macrotask so the
+   * truncation is committed before the send effect reads it. Four call sites had
+   * a copy each.
+   */
+  const queueSend = useCallback(
+    (text: string, keep: number) => {
+      pendingSendRef.current = { text, conversationId }
+      setMessages(messagesRef.current.slice(0, keep))
+      setTimeout(() => {
+        setSendTrigger((n) => n + 1)
+      }, 0)
+    },
+    [conversationId, setMessages],
+  )
 
   // Fires deferred sendMessage after setMessages has been committed
   useEffect(() => {
@@ -368,14 +384,9 @@ const ChatInner = () => {
     const messageIndex = messages.findIndex((m) => m.id === pendingEdit.messageId)
     if (messageIndex === -1) return
 
-    pendingSendRef.current = { text: pendingEdit.text, model, builtinTools: enabledTools, conversationId }
-    setMessages(messages.slice(0, messageIndex))
+    queueSend(pendingEdit.text, messageIndex)
     setPendingEdit(null)
-    // Defer to next macrotask so setMessages commits before the send effect fires
-    setTimeout(() => {
-      setSendTrigger((n) => n + 1)
-    }, 0)
-  }, [pendingEdit, messages, setMessages, model, enabledTools, conversationId])
+  }, [pendingEdit, messages, queueSend])
 
   // Retry: re-run the last user message, discarding everything generated after
   // it (partial assistant text, in-progress tool parts, whole tool-loop turns).
@@ -389,13 +400,9 @@ const ChatInner = () => {
     const text = textPart && 'text' in textPart ? textPart.text : ''
 
     clearError()
-    pendingSendRef.current = { text, model, builtinTools: enabledTools, conversationId }
     // Drop the user message too; the deferred send re-adds it cleanly.
-    setMessages(messages.slice(0, i))
-    setTimeout(() => {
-      setSendTrigger((n) => n + 1)
-    }, 0)
-  }, [messages, clearError, setMessages, model, enabledTools, conversationId])
+    queueSend(text, i)
+  }, [messages, clearError, queueSend])
 
   // Continue: append a `continue` user message to a valid history. If the run
   // errored mid-tool-call, the trailing assistant message may hold a tool part
@@ -405,11 +412,7 @@ const ChatInner = () => {
     const lastMessage = messages.at(-1)
     if (lastMessage?.role === 'assistant' && hasIncompleteToolPart(lastMessage.parts)) {
       clearError()
-      pendingSendRef.current = { text: 'continue', model, builtinTools: enabledTools, conversationId }
-      setMessages(messages.slice(0, -1))
-      setTimeout(() => {
-        setSendTrigger((n) => n + 1)
-      }, 0)
+      queueSend('continue', messages.length - 1)
       return
     }
 
@@ -441,17 +444,14 @@ const ChatInner = () => {
       console.error('Failed to save forked messages:', err)
     })
 
-    // Set up pending message to auto-send after navigation
-    pendingSendRef.current = {
-      text: pendingEdit.text,
-      model,
-      builtinTools: enabledTools,
-      conversationId: newConversationId,
-    }
+    // Not `queueSend`: this one is fired by the load effect once the fork's own
+    // history has been read, not by a timer here — sending before that would go
+    // out without the history it was forked from.
+    pendingSendRef.current = { text: pendingEdit.text, conversationId: newConversationId }
 
     setPendingEdit(null)
     setConversationId(newConversationId)
-  }, [pendingEdit, messages, conversationId, model, enabledTools, setConversationId])
+  }, [pendingEdit, messages, conversationId, setConversationId])
 
   const handleNavigateToFork = useCallback(
     (targetConversationId: string) => {
@@ -514,26 +514,22 @@ const ChatInner = () => {
     )
 
   const loadErrorBanner = loadFailed && (
-    <div className="mx-auto w-full max-w-3xl px-4">
-      <ConversationLoadError
-        onRetry={() => {
-          setLoadAttempt((n) => n + 1)
-        }}
-      />
-    </div>
+    <ConversationLoadError
+      onRetry={() => {
+        setLoadAttempt((n) => n + 1)
+      }}
+    />
   )
 
   const configBanner = configQuery.isError && (
-    <div className="mx-auto w-full max-w-3xl px-4">
-      <ConfigErrorBanner
-        isRetrying={configQuery.isFetching}
-        onRetry={() => {
-          configQuery.refetch().catch((error: unknown) => {
-            console.error('Error reloading configuration:', error)
-          })
-        }}
-      />
-    </div>
+    <ConfigErrorBanner
+      isRetrying={configQuery.isFetching}
+      onRetry={() => {
+        configQuery.refetch().catch((error: unknown) => {
+          console.error('Error reloading configuration:', error)
+        })
+      }}
+    />
   )
 
   const renderComposer = (showHint: boolean) => (
@@ -728,7 +724,7 @@ function renderMessageParts(
       return (
         <HiddenToolsGroup
           key={`hidden-${message.id}-${run.indices[0]}`}
-          toolNames={run.indices.map((i) => toolNameOfPart(message.parts[i]) ?? '')}
+          toolNames={run.indices.map((i) => descriptors[i].toolName ?? '')}
         >
           {run.indices.map((i) => renderPart(message.parts[i], i))}
         </HiddenToolsGroup>
@@ -766,8 +762,8 @@ function renderMessageParts(
     // step boundary and sources are collected into the strip above the turn, and
     // a provider that cites its sources emits them between the calls they came
     // from.
-    if (run.kind === 'single' && !isRenderedPart(message.parts[run.index])) continue
-    if (run.kind !== 'single' || isActivityPart(message.parts[run.index])) {
+    if (run.kind === 'single' && !isRenderedPart(message.parts[run.index], descriptors[run.index].toolName)) continue
+    if (run.kind !== 'single' || isActivityPart(message.parts[run.index], descriptors[run.index].toolName)) {
       activity.push(run)
       continue
     }
@@ -781,13 +777,13 @@ function renderMessageParts(
 
     const { runs } = item
     const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
-    const toolIndices = indices.filter((i) => toolNameOfPart(message.parts[i]) !== null)
+    const toolIndices = indices.filter((i) => descriptors[i].toolName !== null)
 
     return (
       <TurnActivity
         key={`activity-${message.id}-${indices[0]}`}
         calls={toolIndices.map((i) => ({
-          name: toolNameOfPart(message.parts[i]) ?? '',
+          name: descriptors[i].toolName ?? '',
           state: partState(message.parts[i]),
         }))}
         hasReasoning={indices.some((i) => message.parts[i].type === 'reasoning')}
@@ -811,15 +807,18 @@ function renderMessageParts(
 // Whether `Part` puts anything on screen for this part. Kept in step with the
 // branches in `Part.tsx`: text, reasoning and tool calls render, and everything
 // else a message can carry (`step-start`, sources, files) draws nothing here.
-function isRenderedPart(part: UIMessagePart<UIDataTypes, UITools>): boolean {
-  return part.type === 'text' || part.type === 'reasoning' || toolNameOfPart(part) !== null
+// `toolName` comes from the descriptor the caller already built — this runs for
+// every part of every message on every streamed chunk, so re-deriving it here
+// was several thousand throwaway allocations a second on a long conversation.
+function isRenderedPart(part: UIMessagePart<UIDataTypes, UITools>, toolName: string | null): boolean {
+  return part.type === 'text' || part.type === 'reasoning' || toolName !== null
 }
 
 // What belongs in the activity block: the model's thinking and its tool calls.
 // Prose is the answer and stays out of it; sources render in their own strip
 // above the turn.
-function isActivityPart(part: UIMessagePart<UIDataTypes, UITools>): boolean {
-  return part.type === 'reasoning' || toolNameOfPart(part) !== null
+function isActivityPart(part: UIMessagePart<UIDataTypes, UITools>, toolName: string | null): boolean {
+  return part.type === 'reasoning' || toolName !== null
 }
 
 // A tool part's lifecycle state (e.g. `output-available`). Non-tool parts have

@@ -1,6 +1,6 @@
-import { DatabaseBackupIcon, RefreshCcwIcon } from 'lucide-react'
+import { DatabaseBackupIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { RetryBanner } from '@/components/retry-banner'
 
 /**
  * Shown when a conversation's history could not be read from browser storage.
@@ -12,19 +12,9 @@ import { Button } from '@/components/ui/button'
  */
 export function ConversationLoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div
-      role="alert"
-      className="border-destructive/25 bg-destructive/5 mx-auto mb-2 flex w-full max-w-3xl items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-    >
-      <DatabaseBackupIcon className="text-destructive size-4 shrink-0" />
-      <span className="min-w-0 flex-1">
-        Couldn&apos;t open this conversation from browser storage. Its messages are still saved — sending is paused so
-        a new reply cannot overwrite them.
-      </span>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        <RefreshCcwIcon className="size-3.5" />
-        Try again
-      </Button>
-    </div>
+    <RetryBanner icon={DatabaseBackupIcon} onRetry={onRetry} retryLabel="Try again">
+      Couldn&apos;t open this conversation from browser storage. Its messages are still saved — sending is paused so a
+      new reply cannot overwrite them.
+    </RetryBanner>
   )
 }

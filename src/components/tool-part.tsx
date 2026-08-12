@@ -1,6 +1,6 @@
 import { ToolApprovalPrompt } from '@/components/tool-approval-prompt'
 import { ToolError } from '@/components/tool-error'
-import { ToolOutputCode } from '@/components/tool-output-code'
+import { stringifyToolOutput, ToolOutputCode } from '@/components/tool-output-code'
 import { ToolPartHeader } from '@/components/tool-part-header'
 import { ToolSection } from '@/components/tool-section'
 import { RunCodeInput } from '@/components/run-code-input'
@@ -19,15 +19,6 @@ const ACCENT: Partial<Record<(ToolUIPart | DynamicToolUIPart)['state'], string>>
   'approval-requested': 'border-l-amber-500',
   'output-error': 'border-l-destructive/60',
   'output-denied': 'border-l-destructive/60',
-}
-
-function stringify(value: unknown): string {
-  try {
-    const json: unknown = JSON.stringify(value, null, 2)
-    return typeof json === 'string' ? json : String(value)
-  } catch {
-    return String(value)
-  }
 }
 
 interface ToolPartProps {
@@ -52,8 +43,16 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
   // Only the copy action inside the open card needs this. Serialising it up
   // front made reopening a conversation walk every tool payload it holds,
   // including the collapsed ones nobody is looking at.
-  const inputText = useMemo(() => (open ? stringify(part.input) : ''), [open, part.input])
+  const inputText = useMemo(() => (open ? stringifyToolOutput(part.input) : ''), [open, part.input])
   const hasOutput = part.state === 'output-available' || part.state === 'output-error'
+  // Same reason, and the output is the larger of the two: unmemoized, every open
+  // card re-serialized its whole result on every render — which is every
+  // streamed chunk of every later reply — for a string only the copy button
+  // ever reads.
+  const outputText = useMemo(
+    () => (open && hasOutput ? stringifyToolOutput(part.output) : ''),
+    [open, hasOutput, part.output],
+  )
 
   return (
     <Collapsible
@@ -118,7 +117,7 @@ export function ToolPart({ part, onApprovalResponse }: ToolPartProps) {
                 part.output !== undefined && (
                   <ToolSection
                     label="Result"
-                    copyText={stringify(part.output)}
+                    copyText={outputText}
                     contentClassName="bg-muted/40 overflow-x-auto [&_table]:w-full"
                   >
                     <ToolOutputCode output={part.output} />

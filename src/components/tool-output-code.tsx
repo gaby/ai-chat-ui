@@ -7,7 +7,8 @@ const LARGE_TOOL_OUTPUT_LENGTH = 20_000
 // Memoize to avoid re-running highlighters on unchanged code.
 const CodeBlockMemo = memo(CodeBlock)
 
-function stringifyToolOutput(output: unknown): string {
+/** Tool payloads as text — for the code block below, and for copying. */
+export function stringifyToolOutput(output: unknown): string {
   try {
     const stringified: unknown = JSON.stringify(output, null, 2)
     return typeof stringified === 'string' ? stringified : String(output)

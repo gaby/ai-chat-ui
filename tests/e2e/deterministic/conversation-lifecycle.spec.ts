@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { chat, sendMessage, waitForPersisted } from '../conversation'
-import { sidebar } from '../sidebar'
+import { conversationAction, sidebar } from '../sidebar'
 
 test.describe('conversation lifecycle', () => {
   test('messages persist across page reload', async ({ page }) => {
@@ -38,8 +38,7 @@ test.describe('conversation lifecycle', () => {
     await sendMessage(page, 'text', 'Delete me')
     await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Delete me' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Delete me', 'Delete')
 
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Delete' }).click()
@@ -56,10 +55,7 @@ test.describe('conversation lifecycle', () => {
     await waitForPersisted(page)
     const deletedUrl = page.url()
 
-    await sidebar(page)
-      .getByRole('button', { name: 'Conversation options: Delete me for good' })
-      .click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Delete me for good', 'Delete')
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByText('Chat deleted successfully')).toBeVisible()
 
@@ -78,8 +74,7 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
     await waitForPersisted(page)
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Gone for good' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Gone for good', 'Delete')
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
     await expect(page).toHaveURL('/')
 
@@ -97,8 +92,7 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
     await waitForPersisted(page)
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Spare me' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Spare me', 'Delete')
 
     // Focus opens on Cancel, and a dialog-wide Enter handler used to confirm
     // the delete regardless — so the opening keystroke destroyed the
@@ -118,8 +112,7 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
     await waitForPersisted(page)
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Enter deletes me' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Enter deletes me', 'Delete')
 
     // Dropping the dialog-wide handler must not cost the keyboard path: Enter
     // still confirms, natively, on the button the user actually moved to.
@@ -163,8 +156,7 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Keep this')).toBeVisible()
 
     const currentUrl = page.url()
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Remove this' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await conversationAction(page, 'Remove this', 'Delete')
 
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('button', { name: 'Delete' }).click()

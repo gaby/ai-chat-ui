@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { sidebar } from '../sidebar'
+import { conversationAction, sidebar } from '../sidebar'
 
 test.describe('conversation management', () => {
   test('renaming replaces the derived title everywhere', async ({ page }) => {
@@ -8,10 +8,7 @@ test.describe('conversation management', () => {
     await sendMessage(page, 'text', 'A message that makes a poor title')
     await expect(page.getByText('Hello from the test server')).toBeVisible()
 
-    await sidebar(page)
-      .getByRole('button', { name: 'Conversation options: A message that makes a poor title' })
-      .click({ force: true })
-    await page.getByRole('menuitem', { name: 'Rename' }).click()
+    await conversationAction(page, 'A message that makes a poor title', 'Rename')
 
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Conversation name').fill('Weather research')
@@ -29,13 +26,11 @@ test.describe('conversation management', () => {
 
     await expect(sidebar(page).getByText('Pinned')).toBeHidden()
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Keep me handy' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Pin' }).click()
+    await conversationAction(page, 'Keep me handy', 'Pin')
 
     await expect(sidebar(page).getByText('Pinned')).toBeVisible()
 
-    await sidebar(page).getByRole('button', { name: 'Conversation options: Keep me handy' }).click({ force: true })
-    await page.getByRole('menuitem', { name: 'Unpin' }).click()
+    await conversationAction(page, 'Keep me handy', 'Unpin')
 
     await expect(sidebar(page).getByText('Pinned')).toBeHidden()
   })

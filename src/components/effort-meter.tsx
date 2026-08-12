@@ -41,7 +41,6 @@ export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
   const [open, setOpen] = useState(false)
   const optionsRef = useRef<(HTMLButtonElement | null)[]>([])
   const current = THINKING_EFFORT_LEVELS.indexOf(value)
-  const level = THINKING_EFFORT_LEVELS[current]
 
   const select = (option: ThinkingEffort) => {
     onValueChange(option)
@@ -63,20 +62,20 @@ export function EffortMeter({ value, onValueChange }: EffortMeterProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        aria-label={`Thinking effort: ${EFFORT_LABELS[level]}`}
+        aria-label={`Thinking effort: ${EFFORT_LABELS[value]}`}
         className="text-muted-foreground hover:bg-accent hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground group flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors"
       >
         <EffortBars level={current} className="group-hover:opacity-90" />
         {/* On a narrow screen the bars carry the meaning on their own; the
             accessible name still spells the level out. */}
-        <span className="hidden sm:inline">{EFFORT_LABELS[level]}</span>
+        <span className="hidden sm:inline">{EFFORT_LABELS[value]}</span>
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-64 p-1.5">
         <p className="text-muted-foreground px-2 py-1.5 text-xs font-medium">Thinking effort</p>
         <div role="radiogroup" aria-label="Thinking effort" onKeyDown={onKeyDown}>
           {THINKING_EFFORT_LEVELS.map((option, index) => {
-            const selected = option === level
+            const selected = option === value
             return (
               <button
                 key={option}

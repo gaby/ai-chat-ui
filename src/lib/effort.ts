@@ -3,7 +3,7 @@ import { THINKING_EFFORT_LEVELS, type ThinkingEffort } from '@/lib/generated/thi
 const STORAGE_KEY = 'effort'
 const DEFAULT_EFFORT: ThinkingEffort = 'medium'
 
-export function isThinkingEffort(value: string): value is ThinkingEffort {
+function isThinkingEffort(value: string): value is ThinkingEffort {
   return (THINKING_EFFORT_LEVELS as readonly string[]).includes(value)
 }
 

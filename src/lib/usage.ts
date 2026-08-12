@@ -114,13 +114,23 @@ function messageCharacters(message: UIMessage): number {
  * counted here, so it reads low on tool-heavy turns.
  */
 export function estimateTokens(messages: UIMessage[], { skipReported = false } = {}): number {
+  return estimateFrom(messages, skipReported ? (message) => parseUsage(message.metadata) !== null : () => false)
+}
+
+/**
+ * The estimate proper. `reportedAlready` decides which assistant turns the
+ * backend has already accounted for; it is passed in rather than re-derived so
+ * `conversationUsage` can answer from the pass it has already made instead of
+ * calling `parseUsage` over every message a second time.
+ */
+function estimateFrom(messages: UIMessage[], reportedAlready: (message: UIMessage) => boolean): number {
   let sent = 0
   let characters = 0
 
   for (const message of messages) {
     const own = messageCharacters(message)
     // The request that produced this reply carried everything before it.
-    if (message.role === 'assistant' && !(skipReported && parseUsage(message.metadata))) {
+    if (message.role === 'assistant' && !reportedAlready(message)) {
       characters += sent + own
     }
     sent += own
@@ -148,12 +158,17 @@ export function conversationUsage(messages: UIMessage[]): ConversationUsage {
   let reported: TokenUsage | null = null
   let reportedTurns = 0
   let assistantTurns = 0
+  // Which turns reported, remembered from this pass. The estimate needs the same
+  // answer, and asking `parseUsage` again there walked every message's metadata
+  // a second time on every render.
+  const hasReport = new WeakSet<UIMessage>()
 
   for (const message of messages) {
     if (message.role !== 'assistant') continue
     assistantTurns += 1
     const usage = parseUsage(message.metadata)
     if (!usage) continue
+    hasReport.add(message)
     reportedTurns += 1
     reported = reported ? addUsage(reported, usage) : usage
   }
@@ -163,7 +178,7 @@ export function conversationUsage(messages: UIMessage[]): ConversationUsage {
   // the UI will actually show — which a partial history is: summing the turns
   // that reported and printing that as the conversation total made a long chat
   // with one newly-reported reply read as if it had cost only that reply.
-  const estimatedTokens = reportedTurns === assistantTurns ? 0 : estimateTokens(messages, { skipReported: true })
+  const estimatedTokens = reportedTurns === assistantTurns ? 0 : estimateFrom(messages, (m) => hasReport.has(m))
   return { reported, reportedTurns, assistantTurns, estimatedTokens }
 }
 

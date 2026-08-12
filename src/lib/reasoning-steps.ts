@@ -12,16 +12,6 @@ const HEADING_PATTERNS = [
 ]
 
 /**
- * Split on blank lines, except inside a fenced code block — a fence with a
- * blank line in it would otherwise be torn across two steps and rendered as two
- * broken fences.
- *
- * The opening marker is remembered, because a fence only closes on the same
- * character at the same width or wider, with nothing after it. Toggling on any
- * fence-looking line closed a ````-fenced block at the ``` example inside it,
- * and the blank lines that followed then tore the code apart.
- */
-/**
  * Tracks whether the lines fed to it are inside a fenced code block.
  *
  * Shared by the two passes below so they cannot disagree about where the code
@@ -53,6 +43,16 @@ function fenceTracker() {
   }
 }
 
+/**
+ * Split on blank lines, except inside a fenced code block — a fence with a
+ * blank line in it would otherwise be torn across two steps and rendered as two
+ * broken fences.
+ *
+ * The opening marker is remembered, because a fence only closes on the same
+ * character at the same width or wider, with nothing after it. Toggling on any
+ * fence-looking line closed a ````-fenced block at the ``` example inside it,
+ * and the blank lines that followed then tore the code apart.
+ */
 function splitParagraphs(text: string): string[] {
   const paragraphs: string[] = []
   let current: string[] = []

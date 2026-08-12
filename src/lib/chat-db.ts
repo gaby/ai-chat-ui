@@ -105,6 +105,7 @@ export async function saveConversation(
         resolve()
       }
     })
+    lastKnownActivity.set(conversation.id, conversation.timestamp)
     if (notify) notifyConversationsChanged()
   } catch (error) {
     toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
@@ -113,47 +114,74 @@ export async function saveConversation(
 }
 
 /**
+ * Read a conversation, decide what it should become, and write it back — all in
+ * one `readwrite` transaction.
+ *
+ * The transaction is the point. Reading and writing separately let a rename or a
+ * pin land in between, so it was read before the change and written back after
+ * it, silently reverting what the user had just done — and a run stamps activity
+ * every 30s, so the window was not hypothetical.
+ *
+ * `decide` returns the entry to store, or null to leave the record alone.
+ * Readers are notified only when something was actually written.
+ */
+async function updateConversation(
+  conversationId: string,
+  decide: (existing: ConversationEntry | undefined) => ConversationEntry | null,
+  { failureMessage, toastOnFailure = true }: { failureMessage: string; toastOnFailure?: boolean },
+): Promise<boolean> {
+  if (deletedConversations.has(conversationId)) return false
+
+  try {
+    const db = await openDatabase()
+    const wrote = await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+      const store = tx.objectStore(CONVERSATIONS_STORE)
+      const read = store.get(conversationId)
+      let written = false
+
+      read.onsuccess = () => {
+        const next = decide(read.result as ConversationEntry | undefined)
+        if (next === null) return
+        store.put(next)
+        written = true
+      }
+      tx.oncomplete = () => {
+        resolve(written)
+      }
+      tx.onerror = () => {
+        reject(new Error(tx.error?.message ?? failureMessage))
+      }
+    })
+
+    if (wrote) notifyConversationsChanged()
+    return wrote
+  } catch (error) {
+    if (toastOnFailure) {
+      toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
+    }
+    throw error
+  }
+}
+
+/**
  * Apply a partial change to a stored conversation.
  *
- * Read and write happen in one `readwrite` transaction, so the change lands on
- * whatever is in the store rather than on a snapshot the caller read earlier.
- * Writing the whole entry back instead — the sidebar holds a list that is a
- * render behind — restored the old `timestamp` when a rename or a pin raced the
- * activity stamp of a run, dropping an active conversation back down the list.
+ * The change lands on whatever is in the store rather than on a snapshot the
+ * caller read earlier — the sidebar holds a list that is a render behind, and
+ * writing its whole entry back restored the old `timestamp` when a rename or a
+ * pin raced the activity stamp of a run.
  */
 export async function patchConversation(
   conversationId: string,
   patch: Partial<Omit<ConversationEntry, 'id'>>,
 ): Promise<void> {
-  if (deletedConversations.has(conversationId)) return
-
-  try {
-    const db = await openDatabase()
-    const patched = await new Promise<boolean>((resolve, reject) => {
-      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
-      const store = tx.objectStore(CONVERSATIONS_STORE)
-      const read = store.get(conversationId)
-      let wrote = false
-
-      read.onsuccess = () => {
-        const existing = read.result as ConversationEntry | undefined
-        if (!existing) return
-        store.put({ ...existing, ...patch })
-        wrote = true
-      }
-      tx.oncomplete = () => {
-        resolve(wrote)
-      }
-      tx.onerror = () => {
-        reject(new Error(tx.error?.message ?? 'Failed to update conversation'))
-      }
-    })
-
-    if (patched) notifyConversationsChanged()
-  } catch (error) {
-    toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
-    throw error
-  }
+  // A patch may carry a `timestamp`, so the cached stamp is no longer known to
+  // be right; dropping it costs one read next time and cannot go stale.
+  lastKnownActivity.delete(conversationId)
+  await updateConversation(conversationId, (existing) => (existing ? { ...existing, ...patch } : null), {
+    failureMessage: 'Failed to update conversation',
+  })
 }
 
 /**
@@ -165,43 +193,30 @@ export async function patchConversation(
  * never heard of: the conversation vanished the moment it was navigated away
  * from. Sending there now gives it an entry.
  *
- * Insert-only, and in one transaction, so it cannot overwrite the title, pin or
- * activity stamp of a conversation that does exist.
+ * Insert-only, so it cannot overwrite the title, pin or activity stamp of a
+ * conversation that does exist.
  */
 export async function ensureConversationEntry(conversation: ConversationEntry): Promise<void> {
-  if (deletedConversations.has(conversation.id)) return
-
-  try {
-    const db = await openDatabase()
-    const inserted = await new Promise<boolean>((resolve, reject) => {
-      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
-      const store = tx.objectStore(CONVERSATIONS_STORE)
-      const read = store.get(conversation.id)
-      let wrote = false
-
-      read.onsuccess = () => {
-        if (read.result !== undefined) return
-        store.put(conversation)
-        wrote = true
-      }
-      tx.oncomplete = () => {
-        resolve(wrote)
-      }
-      tx.onerror = () => {
-        reject(new Error(tx.error?.message ?? 'Failed to create conversation'))
-      }
-    })
-
-    if (inserted) notifyConversationsChanged()
-  } catch (error) {
-    toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
-    throw error
-  }
+  const inserted = await updateConversation(conversation.id, (existing) => (existing ? null : conversation), {
+    failureMessage: 'Failed to create conversation',
+  })
+  if (inserted) lastKnownActivity.set(conversation.id, conversation.timestamp)
 }
 
 // Below this, a rewrite would not change what any reader displays, so the churn
 // (an IDB write plus a re-read in every subscriber) is not worth it.
 const ACTIVITY_RESOLUTION_MS = 30_000
+
+/**
+ * The activity stamp each conversation was last seen to carry.
+ *
+ * `saveMessages` runs twice a second while a reply streams, and each call used
+ * to open a second transaction just to discover the stamp was too fresh to
+ * rewrite — roughly 120 transactions a minute, ~118 of which wrote nothing.
+ * This answers that question without touching storage. Nothing depends on it
+ * being complete: a miss just does the read it would have done anyway.
+ */
+const lastKnownActivity = new Map<string, number>()
 
 /**
  * Record that a conversation was just used.
@@ -211,36 +226,29 @@ const ACTIVITY_RESOLUTION_MS = 30_000
  * still read "20d ago" and sorted below untouched newer ones.
  */
 async function touchConversation(conversationId: string, at: number): Promise<void> {
-  const db = await openDatabase()
+  const known = lastKnownActivity.get(conversationId)
+  if (known !== undefined && at - known < ACTIVITY_RESOLUTION_MS) return
 
-  // Read and write in one `readwrite` transaction. Split across two, a rename or
-  // a pin landing in between would be read before the change and written back
-  // after it, silently reverting what the user just did — and a run bumps this
-  // every 30s, so the window is not hypothetical.
-  const touched = await new Promise<boolean>((resolve, reject) => {
-    const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
-    const store = tx.objectStore(CONVERSATIONS_STORE)
-    const read = store.get(conversationId)
-    let wrote = false
-
-    read.onsuccess = () => {
-      const existing = read.result as ConversationEntry | undefined
-      if (!existing || at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return
+  await updateConversation(
+    conversationId,
+    (existing) => {
+      if (!existing) return null
+      lastKnownActivity.set(conversationId, existing.timestamp)
+      if (at - existing.timestamp < ACTIVITY_RESOLUTION_MS) return null
+      lastKnownActivity.set(conversationId, at)
       // Freeze the creation time before moving `timestamp` off it. Entries
       // written before `createdAt` existed have only this one moment left where
       // the original is still readable, and fork ordering depends on it.
-      store.put({ ...existing, createdAt: existing.createdAt ?? existing.timestamp, timestamp: at })
-      wrote = true
-    }
-    tx.oncomplete = () => {
-      resolve(wrote)
-    }
-    tx.onerror = () => {
-      reject(new Error(tx.error?.message ?? 'Failed to record conversation activity'))
-    }
-  })
-
-  if (touched) notifyConversationsChanged()
+      return { ...existing, createdAt: existing.createdAt ?? existing.timestamp, timestamp: at }
+    },
+    {
+      failureMessage: 'Failed to record conversation activity',
+      // The history is already committed by the time this runs, so a failure to
+      // stamp activity is a stale sidebar timestamp, not lost messages —
+      // `saveMessages` logs it rather than alarming anyone.
+      toastOnFailure: false,
+    },
+  )
 }
 
 /**
@@ -268,6 +276,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
   // writing the history back once it completed. Rolled back below if the delete
   // itself fails, so a conversation that is still there stays writable.
   deletedConversations.add(conversationId)
+  lastKnownActivity.delete(conversationId)
 
   let db: IDBDatabase
   try {
