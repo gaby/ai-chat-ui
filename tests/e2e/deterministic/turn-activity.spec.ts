@@ -35,6 +35,24 @@ test.describe('turn activity', () => {
     await expect(toolCard(page, 'calculate')).toBeVisible()
   })
 
+  test('keeps a cited source from splitting the block', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'sourced-tools', 'Look it up and work it out')
+    await expect(page.getByText('Looked it up and worked it out.')).toBeVisible()
+
+    // The source lands between the two calls, where a provider that cites its
+    // sources puts them. It renders in the strip above the turn rather than in
+    // the message column, but as a part it still ended the activity run — one
+    // block per tool call, around something invisible.
+    await expect(page.getByTestId('turn-activity')).toHaveCount(1)
+    await expect(page.getByTestId('turn-activity')).toContainText('get_weather, calculate')
+    await expect(page.getByRole('button', { name: /source/i })).toBeVisible()
+
+    await showActivity(page)
+    await expect(toolCard(page, 'get_weather')).toBeVisible()
+    await expect(toolCard(page, 'calculate')).toBeVisible()
+  })
+
   test('holds itself open while an approval is pending', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'approval', 'Send an email')

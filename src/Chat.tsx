@@ -764,11 +764,13 @@ function renderMessageParts(
   }
 
   for (const run of groupParts(descriptors)) {
-    // `step-start` marks the boundary between the model's steps. `Part` renders
-    // nothing for it, but treating it as content split a multi-step tool loop
-    // across several foldable blocks — the exact shape the single block exists
-    // to collect.
-    if (run.kind === 'single' && message.parts[run.index].type === 'step-start') continue
+    // Parts the message column draws nothing for still ended the current run,
+    // so a tool loop split into a foldable block per invisible marker — the
+    // exact shape the single block exists to collect. `step-start` marks a model
+    // step boundary and sources are collected into the strip above the turn, and
+    // a provider that cites its sources emits them between the calls they came
+    // from.
+    if (run.kind === 'single' && !isRenderedPart(message.parts[run.index])) continue
     if (run.kind !== 'single' || isActivityPart(message.parts[run.index])) {
       activity.push(run)
       continue
@@ -779,6 +781,13 @@ function renderMessageParts(
   flushActivity()
 
   return output
+}
+
+// Whether `Part` puts anything on screen for this part. Kept in step with the
+// branches in `Part.tsx`: text, reasoning and tool calls render, and everything
+// else a message can carry (`step-start`, sources, files) draws nothing here.
+function isRenderedPart(part: UIMessagePart<UIDataTypes, UITools>): boolean {
+  return part.type === 'text' || part.type === 'reasoning' || toolNameOfPart(part) !== null
 }
 
 // What belongs in the activity block: the model's thinking and its tool calls.

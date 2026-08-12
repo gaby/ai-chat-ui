@@ -18,6 +18,7 @@ from pydantic_ai.models.function import AgentInfo, DeltaThinkingPart, DeltaToolC
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 from pydantic_ai.ui.vercel_ai._event_stream import VercelAIEventStream
+from pydantic_ai.ui.vercel_ai.response_types import SourceUrlChunk
 
 agent = Agent(output_type=[str, DeferredToolRequests])
 
@@ -165,6 +166,26 @@ async def stream_multi_tool(
     yield {
         0: DeltaToolCall(name="get_weather", json_args=json.dumps({"city": "San Francisco"})),
         1: DeltaToolCall(name="calculate", json_args=json.dumps({"expression": "2 + 2"})),
+    }
+
+
+async def stream_sourced_tools(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """Two tool calls with a cited source between them.
+
+    `SourcedEventStream` injects the `source-url` chunk after the first call's
+    input lands, which is where a provider that cites its sources puts them. The
+    UI renders sources in their own strip, so the part draws nothing in the
+    message column — and treating it as content used to break the turn's work
+    into one foldable block per tool call.
+    """
+    if _has_tool_return(messages):
+        yield "Looked it up and worked it out."
+        return
+    yield {
+        0: DeltaToolCall(name="get_weather", json_args=json.dumps({"city": "Lisbon"})),
+        1: DeltaToolCall(name="calculate", json_args=json.dumps({"expression": "3 + 4"})),
     }
 
 
@@ -341,6 +362,7 @@ models: dict[str, object] = {
     "approval-error": FunctionModel(stream_function=stream_approval_error),
     "repeated-approval": FunctionModel(stream_function=stream_repeated_approval),
     "run-code": FunctionModel(stream_function=stream_run_code),
+    "sourced-tools": FunctionModel(stream_function=stream_sourced_tools),
     "large-output": FunctionModel(stream_function=stream_large_output),
     "anthropic": "anthropic:claude-haiku-4-5",
     "openai": "openai-responses:gpt-4.1-nano",
@@ -391,6 +413,23 @@ class UsageEventStream(VercelAIEventStream):
     #: per-reply chip read "0 in, 0 out" on a reply that cost real tokens.
     total_only = False
 
+    #: Emit a `source-url` chunk once the first tool call's input has landed,
+    #: which is where a provider that cites its sources puts them: between the
+    #: calls they came from, not after the last one.
+    emit_source = False
+    _source_emitted = False
+
+    async def handle_tool_call_end(self, part):  # type: ignore[override]
+        async for chunk in super().handle_tool_call_end(part):
+            yield chunk
+        if self.emit_source and not self._source_emitted:
+            self._source_emitted = True
+            yield SourceUrlChunk(
+                source_id="source-1",
+                url="https://example.com/lisbon-forecast",
+                title="Lisbon forecast",
+            )
+
     async def handle_run_result(self, event):  # type: ignore[override]
         usage = event.result.usage
         response = event.result.response
@@ -425,6 +464,7 @@ class UsageAdapter(VercelAIAdapter):
         # `chat()` splits the same way to look the model up.
         model_id = extra.get("model") or ""
         stream.total_only = model_id.split("::")[-1] == "total-only-usage"
+        stream.emit_source = model_id.split("::")[-1] == "sourced-tools"
         return stream
 
 

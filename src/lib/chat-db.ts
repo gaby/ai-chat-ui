@@ -334,29 +334,39 @@ export async function migrateFromLocalStorage(): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
   const conversations: ConversationEntry[] = JSON.parse(conversationsJson)
   const migratedKeys: string[] = []
+  let wrote = false
 
-  for (const conv of conversations) {
-    // One refresh at the end of the batch, not one per entry.
-    await saveConversation(conv, { notify: false })
+  try {
+    for (const conv of conversations) {
+      // One refresh at the end of the batch, not one per entry.
+      await saveConversation(conv, { notify: false })
+      wrote = true
 
-    const messagesJson = localStorage.getItem(conv.id)
-    if (messagesJson) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
-      const messages: UIMessage[] = JSON.parse(messagesJson)
-      // Restoring history is not activity: keep each conversation's own timestamp.
-      await saveMessages(conv.id, messages, { touch: false })
-      migratedKeys.push(conv.id)
+      const messagesJson = localStorage.getItem(conv.id)
+      if (messagesJson) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
+        const messages: UIMessage[] = JSON.parse(messagesJson)
+        // Restoring history is not activity: keep each conversation's own timestamp.
+        await saveMessages(conv.id, messages, { touch: false })
+        migratedKeys.push(conv.id)
+      }
     }
-  }
 
-  // Clean up localStorage only after all IDB writes succeeded
-  for (const key of migratedKeys) {
-    localStorage.removeItem(key)
+    // Clean up localStorage only after all IDB writes succeeded
+    for (const key of migratedKeys) {
+      localStorage.removeItem(key)
+    }
+    localStorage.removeItem('conversationIds')
+    localStorage.setItem(migrationKey, 'true')
+  } finally {
+    // Also on the way out of a failed migration. The sidebar is mounted by the
+    // time this runs and has already read an empty store, so whatever did land
+    // before the failure stayed invisible until some other write happened to
+    // notify — on a batch that aborts early, that could be the rest of the
+    // session. Suppressing the per-entry events is a batching decision; it must
+    // not turn into no event at all.
+    if (wrote) notifyConversationsChanged()
   }
-  localStorage.removeItem('conversationIds')
-  localStorage.setItem(migrationKey, 'true')
-
-  if (conversations.length > 0) notifyConversationsChanged()
 
   return true
 }
