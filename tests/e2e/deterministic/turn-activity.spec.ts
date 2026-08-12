@@ -53,6 +53,29 @@ test.describe('turn activity', () => {
     await expect(toolCard(page, 'calculate')).toBeVisible()
   })
 
+  test('only the block still being worked on reads as live', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'interleaved', 'Weather, then sums')
+
+    // Prose between the two rounds ends the first block. While the second round
+    // is still going, the first was handed the message's streaming flag too: it
+    // sat there spinning "Working" and counting time it had stopped spending.
+    await expect(page.getByText('Checked the weather. Now the sums:')).toBeVisible()
+    const blocks = page.getByTestId('turn-activity')
+    await expect(blocks).toHaveCount(2)
+
+    // Sampled once, while the stop control says the reply is still streaming.
+    // A retrying assertion would pass either way: it would keep re-reading until
+    // the answer landed, by which point every block reports a duration.
+    await expect(page.getByRole('button', { name: 'Stop generating' })).toBeVisible()
+    const finished = await blocks.first().innerText()
+    expect(finished).not.toContain('Working')
+    expect(finished).toMatch(/Worked for \d+s/)
+
+    await expect(page.getByText('Both rounds are done.')).toBeVisible()
+    await expect(blocks.nth(1)).toContainText(/Worked for \d+s/)
+  })
+
   test('holds itself open while an approval is pending', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'approval', 'Send an email')

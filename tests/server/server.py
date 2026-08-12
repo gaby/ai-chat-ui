@@ -225,6 +225,29 @@ async def stream_two_step(
         yield "Both steps are done."
 
 
+async def stream_interleaved(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """Work, answer, then work again — two activity blocks in one turn.
+
+    The prose between the rounds ends the first block, so only the second one is
+    still live while the turn finishes. Handed the whole message's streaming
+    flag, the first block kept spinning "Working" and counting time it was no
+    longer spending. The second round is paced slowly enough to assert against
+    while it is happening.
+    """
+    returns = [p for msg in messages for p in msg.parts if isinstance(p, ToolReturnPart)]
+    if not returns:
+        yield {0: DeltaToolCall(name="get_weather", json_args=json.dumps({"city": "Cairo"}))}
+    elif len(returns) == 1:
+        yield "Checked the weather. Now the sums:"
+        yield {0: DeltaToolCall(name="calculate", json_args=json.dumps({"expression": "6 * 7"}))}
+    else:
+        for chunk in ["Both", " rounds", " are", " done."]:
+            yield chunk
+            await asyncio.sleep(0.6)
+
+
 async def stream_repeated_tool(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -363,6 +386,7 @@ models: dict[str, object] = {
     "repeated-approval": FunctionModel(stream_function=stream_repeated_approval),
     "run-code": FunctionModel(stream_function=stream_run_code),
     "sourced-tools": FunctionModel(stream_function=stream_sourced_tools),
+    "interleaved": FunctionModel(stream_function=stream_interleaved),
     "large-output": FunctionModel(stream_function=stream_large_output),
     "anthropic": "anthropic:claude-haiku-4-5",
     "openai": "openai-responses:gpt-4.1-nano",

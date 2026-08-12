@@ -27,8 +27,9 @@ import { nanoid } from 'nanoid'
 import { useConversationIdFromUrl } from './hooks/useConversationIdFromUrl'
 import { Part } from './Part'
 import type { ThinkingEffort } from '@/lib/generated/thinking-effort.gen'
-import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
+import type { ConversationEntry } from './types'
 import { readEffort, writeEffort } from '@/lib/effort'
+import { fetchConfig } from '@/lib/config'
 import { resolveSelectedModel } from '@/lib/models'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts, type PartRun } from '@/lib/tool-grouping'
@@ -36,15 +37,6 @@ import { getMessages, isConversationDeleted, saveMessages, saveConversation } fr
 import { stripBasePath, withBasePath } from '@/lib/base-path'
 
 // TODO: if just a single model, don't show model selector, just a label.
-interface RemoteConfig {
-  models: ModelConfig[]
-  builtinTools: BuiltinTool[]
-}
-
-async function getModels() {
-  const res = await fetch('/api/configure')
-  return (await res.json()) as RemoteConfig
-}
 
 const ChatInner = () => {
   const { isFiltered, filters } = useToolFilters()
@@ -126,7 +118,7 @@ const ChatInner = () => {
   const [loadFailed, setLoadFailed] = useState(false)
 
   const configQuery = useQuery({
-    queryFn: getModels,
+    queryFn: fetchConfig,
     queryKey: ['models'],
   })
 
@@ -730,7 +722,9 @@ function renderMessageParts(
     )
   }
 
-  const output: ReactNode[] = []
+  // Laid out before anything renders, because a block cannot tell whether it is
+  // still live until it knows what follows it.
+  const items: ({ kind: 'activity'; runs: PartRun[] } | { kind: 'part'; run: PartRun })[] = []
   // Consecutive work — thinking and tool calls — collects into one foldable
   // block, so a turn reads as "what the agent did" then "what it said" rather
   // than as a stack of cards the answer has to be scrolled past.
@@ -738,29 +732,8 @@ function renderMessageParts(
 
   const flushActivity = () => {
     if (activity.length === 0) return
-    const runs = activity
+    items.push({ kind: 'activity', runs: activity })
     activity = []
-
-    const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
-    const toolIndices = indices.filter((i) => toolNameOfPart(message.parts[i]) !== null)
-
-    output.push(
-      <TurnActivity
-        key={`activity-${message.id}-${indices[0]}`}
-        calls={toolIndices.map((i) => ({
-          name: toolNameOfPart(message.parts[i]) ?? '',
-          state: partState(message.parts[i]),
-        }))}
-        hasReasoning={indices.some((i) => message.parts[i].type === 'reasoning')}
-        isStreaming={isStreaming}
-      >
-        {runs.map((run) => (
-          <TurnActivityStep key={`step-${message.id}-${run.kind === 'single' ? run.index : run.indices[0]}`}>
-            {renderRun(run)}
-          </TurnActivityStep>
-        ))}
-      </TurnActivity>,
-    )
   }
 
   for (const run of groupParts(descriptors)) {
@@ -776,11 +749,40 @@ function renderMessageParts(
       continue
     }
     flushActivity()
-    output.push(renderRun(run))
+    items.push({ kind: 'part', run })
   }
   flushActivity()
 
-  return output
+  return items.map((item, position) => {
+    if (item.kind === 'part') return renderRun(item.run)
+
+    const { runs } = item
+    const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
+    const toolIndices = indices.filter((i) => toolNameOfPart(message.parts[i]) !== null)
+
+    return (
+      <TurnActivity
+        key={`activity-${message.id}-${indices[0]}`}
+        calls={toolIndices.map((i) => ({
+          name: toolNameOfPart(message.parts[i]) ?? '',
+          state: partState(message.parts[i]),
+        }))}
+        hasReasoning={indices.some((i) => message.parts[i].type === 'reasoning')}
+        // Only the last block of a streaming reply is live. A turn that works,
+        // answers, then works again renders two blocks, and handing both the
+        // message's streaming flag left the first one spinning "Working" and
+        // counting time it was no longer spending — anything rendered after a
+        // block means the model has moved on from it.
+        isStreaming={isStreaming && position === items.length - 1}
+      >
+        {runs.map((run) => (
+          <TurnActivityStep key={`step-${message.id}-${run.kind === 'single' ? run.index : run.indices[0]}`}>
+            {renderRun(run)}
+          </TurnActivityStep>
+        ))}
+      </TurnActivity>
+    )
+  })
 }
 
 // Whether `Part` puts anything on screen for this part. Kept in step with the

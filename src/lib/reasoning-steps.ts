@@ -17,9 +17,9 @@ const HEADING_PATTERNS = [
  * broken fences.
  *
  * The opening marker is remembered, because a fence only closes on the same
- * character at the same width or wider. Toggling on any fence-looking line
- * closed a ````-fenced block at the ``` example inside it, and the blank lines
- * that followed then tore the code apart.
+ * character at the same width or wider, with nothing after it. Toggling on any
+ * fence-looking line closed a ````-fenced block at the ``` example inside it,
+ * and the blank lines that followed then tore the code apart.
  */
 function splitParagraphs(text: string): string[] {
   const paragraphs: string[] = []
@@ -33,11 +33,15 @@ function splitParagraphs(text: string): string[] {
   }
 
   for (const line of text.split('\n')) {
-    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1]
-    if (marker) {
+    const match = /^\s*(`{3,}|~{3,})(.*)$/.exec(line)
+    if (match) {
+      const [, marker, rest] = match
       if (fence === null) {
+        // An opening fence may carry an info string (```python).
         fence = { char: marker[0], width: marker.length }
-      } else if (marker.startsWith(fence.char) && marker.length >= fence.width) {
+      } else if (marker.startsWith(fence.char) && marker.length >= fence.width && rest.trim() === '') {
+        // A closing one may not: ```` ```not-a-close ```` is content, and
+        // treating it as the closer let the next blank line split the block.
         fence = null
       }
     }

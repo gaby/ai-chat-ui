@@ -54,6 +54,16 @@ describe('parseReasoningSteps', () => {
     expect(steps[2].body).toBe('That is all.')
   })
 
+  it('does not close a fence on a line that carries more than the delimiter', () => {
+    // An opening fence may carry an info string; a closing one may not. Matching
+    // the delimiter alone let ```` ```not-a-close ```` end the block, and the
+    // blank line after it then split the code in two.
+    const steps = parseReasoningSteps('Look:\n\n```\n```not-a-close\n\nx = 1\n```\n\nDone.')
+
+    expect(steps).toHaveLength(3)
+    expect(steps[1].body).toBe('```\n```not-a-close\n\nx = 1\n```')
+  })
+
   it('does not close a backtick fence on a tilde line', () => {
     const steps = parseReasoningSteps('Compute:\n\n```python\n~~~\n\nx = 1\n```\n\nDone.')
 
