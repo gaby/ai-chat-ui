@@ -214,6 +214,11 @@ async function touchConversation(conversationId: string, at: number): Promise<vo
  */
 const deletedConversations = new Set<string>()
 
+/** Whether this id was deleted in this session; see `deletedConversations`. */
+export function isConversationDeleted(conversationId: string): boolean {
+  return deletedConversations.has(conversationId)
+}
+
 export async function deleteConversation(conversationId: string): Promise<void> {
   // Marked before the transaction opens, not after it commits: a throttled save
   // that starts in between would pass the guard and queue behind the delete,

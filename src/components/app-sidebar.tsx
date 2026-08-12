@@ -57,7 +57,10 @@ function deleteConversation(conversationId: string) {
   return deleteConv(conversationId).then(() => {
     const currentPath = stripBasePath(window.location.pathname)
     if (currentPath === conversationId) {
-      window.history.pushState({}, '', withBasePath('/'))
+      // Replace rather than push: pushing leaves the deleted conversation one
+      // Back press away, and it would open as an empty chat that silently
+      // discards everything typed into it.
+      window.history.replaceState({}, '', withBasePath('/'))
       window.dispatchEvent(new Event('history-state-changed'))
     }
   })

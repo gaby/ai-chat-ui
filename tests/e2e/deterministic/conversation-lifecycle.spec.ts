@@ -72,6 +72,25 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Delete me for good')).toHaveCount(0)
   })
 
+  test('Back does not reopen the conversation that was just deleted', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'text', 'Gone for good')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+
+    await sidebar(page).getByRole('button', { name: 'Conversation options: Gone for good' }).click({ force: true })
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+    await expect(page).toHaveURL('/')
+
+    // The delete used to push `/` on top of the conversation, leaving it one
+    // Back press away — where it opened as an empty chat whose messages were
+    // then dropped by the guard that keeps a deleted conversation deleted.
+    await page.goBack()
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+  })
+
   test('deleting inactive conversation preserves current view', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'text', 'Keep this')

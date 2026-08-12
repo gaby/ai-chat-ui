@@ -31,8 +31,8 @@ import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
 import { readEffort, writeEffort } from '@/lib/effort'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts, type PartRun } from '@/lib/tool-grouping'
-import { getMessages, saveMessages, saveConversation } from '@/lib/chat-db'
-import { stripBasePath } from '@/lib/base-path'
+import { getMessages, isConversationDeleted, saveMessages, saveConversation } from '@/lib/chat-db'
+import { stripBasePath, withBasePath } from '@/lib/base-path'
 
 // TODO: if just a single model, don't show model selector, just a label.
 interface RemoteConfig {
@@ -174,6 +174,15 @@ const ChatInner = () => {
     if (createdHereRef.current === conversationId) {
       createdHereRef.current = null
       setLoadedConversationId(conversationId)
+      return
+    }
+
+    // Deleted in this session, reached by Back or a stale link. Left alone it
+    // opens as an empty chat under the old id, and every message typed into it
+    // is dropped by the write guard without a word.
+    if (conversationId !== '/' && isConversationDeleted(conversationId)) {
+      window.history.replaceState({}, '', withBasePath('/'))
+      window.dispatchEvent(new Event('history-state-changed'))
       return
     }
 

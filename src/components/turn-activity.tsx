@@ -55,6 +55,12 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
   const [open, setOpen] = useState(isStreaming)
   const [duration, setDuration] = useState(0)
   const startedAt = useRef<number | null>(null)
+  // Summed across streamed intervals, because a turn can stop and start again:
+  // an approval pauses it, and the continuation is a second stream. Replacing
+  // the total each time reported only the last leg — 20s of work before an
+  // approval and 2s after read as "Worked for 2s". The wait for the human is
+  // excluded, since the clock only runs between a rise and the next fall.
+  const elapsed = useRef(0)
   const userToggled = useRef(false)
 
   const needsApproval = calls.some((call) => call.state === 'approval-requested')
@@ -75,8 +81,9 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
     // and stays wherever the reader puts it.
     if (startedAt.current === null) return
 
-    setDuration(Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)))
+    elapsed.current += Date.now() - startedAt.current
     startedAt.current = null
+    setDuration(Math.max(1, Math.round(elapsed.current / 1000)))
 
     // Never pull it shut under someone who opened it, and never fold away a
     // pending approval or a failure — the timer is scheduled as the stream ends,
