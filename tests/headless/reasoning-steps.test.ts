@@ -34,6 +34,24 @@ describe('parseReasoningSteps', () => {
     ])
   })
 
+  it('splits headings that run together without a blank line between them', () => {
+    // Markdown does not require a blank line before a heading, and models
+    // routinely run their sections together. Only the paragraph's first line was
+    // read as a title, so the later sections stayed buried in the first body.
+    expect(parseReasoningSteps('## Inspect data\nRows look clean.\n## Compare results\nB wins.')).toEqual([
+      { title: 'Inspect data', body: 'Rows look clean.' },
+      { title: 'Compare results', body: 'B wins.' },
+    ])
+  })
+
+  it('leaves a heading-shaped line inside a code block alone', () => {
+    // Splitting on headings must not reach into code: this is one step, with the
+    // fence intact, rather than a step titled "Not a step".
+    expect(parseReasoningSteps('Sketching it:\n```md\n## Not a step\ntext\n```')).toEqual([
+      { body: 'Sketching it:\n```md\n## Not a step\ntext\n```' },
+    ])
+  })
+
   it('keeps a fenced code block whole even when it contains a blank line', () => {
     const steps = parseReasoningSteps('Let me compute:\n\n```python\nx = 1\n\ny = 2\n```\n\nSo it is 3.')
 

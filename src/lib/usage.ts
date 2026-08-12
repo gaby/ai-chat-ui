@@ -100,8 +100,30 @@ function messageCharacters(message: UIMessage): number {
   return characters
 }
 
+/**
+ * Approximate what a conversation cost, in the same terms a backend reports.
+ *
+ * A reported total is the sum of each request's usage, and every request carries
+ * the conversation so far — so a turn costs the prefix it was sent plus what it
+ * produced, and the prefix is paid again on every turn. Counting each message
+ * once instead put the two numbers on different scales: the same widget showed a
+ * long chat as a fraction of what the identical chat reported elsewhere.
+ *
+ * Still an approximation, and labelled one. It cannot see the system prompt, and
+ * a turn that loops through tools is several requests rather than the one
+ * counted here, so it reads low on tool-heavy turns.
+ */
 export function estimateTokens(messages: UIMessage[]): number {
-  const characters = messages.reduce((total, message) => total + messageCharacters(message), 0)
+  let sent = 0
+  let characters = 0
+
+  for (const message of messages) {
+    const own = messageCharacters(message)
+    // The request that produced this reply carried everything before it.
+    if (message.role === 'assistant') characters += sent + own
+    sent += own
+  }
+
   return Math.ceil(characters / CHARS_PER_TOKEN)
 }
 

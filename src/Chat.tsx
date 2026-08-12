@@ -464,7 +464,9 @@ const ChatInner = () => {
     const textarea = textareaRef.current
     textarea?.focus()
     // Land the caret at the end so an open-ended starter ("Explain how ") can
-    // just be typed into.
+    // just be typed into. The clamp to the old draft's length that this looks
+    // like it would hit does not happen: committing the new value resets the
+    // selection to the end of it, which `welcome.spec.ts` pins down.
     textarea?.setSelectionRange(prompt.length, prompt.length)
   }, [])
 

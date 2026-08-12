@@ -78,6 +78,20 @@ describe('conversationUsage', () => {
 })
 
 describe('estimateTokens', () => {
+  it('charges each turn for the conversation it was sent', () => {
+    // A reported total sums per-request usage, and every request carries the
+    // history again. Counting each message once put the estimate on a different
+    // scale from the number the same widget shows when a backend reports.
+    const messages = [user('a'.repeat(40)), assistant('b'.repeat(40)), user('c'.repeat(40)), assistant('d'.repeat(40))]
+
+    // First turn: 40 sent + 40 produced. Second: 120 sent + 40 produced.
+    expect(estimateTokens(messages)).toBe(Math.ceil((80 + 160) / 4))
+  })
+
+  it('counts nothing before the first reply', () => {
+    expect(estimateTokens([user('a'.repeat(40))])).toBe(0)
+  })
+
   it('counts tool arguments and results, not just prose', () => {
     const withTool = {
       id: 'tool',
