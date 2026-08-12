@@ -45,6 +45,13 @@ function summarize(toolNames: string[]): string {
  * person — a pending approval, a failed call — holds it open instead.
  */
 export function TurnActivity({ calls, hasReasoning, isStreaming, children }: TurnActivityProps) {
+  // Nothing but thinking so far. The reasoning line is already a fold of its
+  // own, so this one steps out of the way — but it stays mounted, because the
+  // first tool call turns it into the wrapper and a remount here would restart
+  // both timers. A turn that reasoned for 30s and then ran a tool for 2s
+  // reported "Worked for 2s".
+  const bare = calls.length === 0
+
   const [open, setOpen] = useState(isStreaming)
   const [duration, setDuration] = useState(0)
   const startedAt = useRef<number | null>(null)
@@ -119,31 +126,40 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
   return (
     <Collapsible
       data-testid="turn-activity"
-      open={open}
+      open={bare || open}
       onOpenChange={(next) => {
         userToggled.current = true
         setOpen(next)
       }}
       className="not-prose w-full"
     >
-      <CollapsibleTrigger
-        // A stable name either way: the label says what happened, this says what
-        // the control does.
-        aria-label={open ? 'Hide activity' : 'Show activity'}
-        className={cn(
-          'text-muted-foreground hover:text-foreground group flex max-w-full items-center gap-1.5 text-sm transition-colors',
-          tone,
-        )}
-      >
-        <Icon className={cn('size-4 shrink-0', isStreaming && 'text-primary animate-spin')} />
-        <span className={cn('truncate', isStreaming && 'animate-pulse')}>{label}</span>
-        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-      </CollapsibleTrigger>
+      {!bare && (
+        <CollapsibleTrigger
+          // A stable name either way: the label says what happened, this says
+          // what the control does.
+          aria-label={open ? 'Hide activity' : 'Show activity'}
+          className={cn(
+            'text-muted-foreground hover:text-foreground group flex max-w-full items-center gap-1.5 text-sm transition-colors',
+            tone,
+          )}
+        >
+          <Icon className={cn('size-4 shrink-0', isStreaming && 'text-primary animate-spin')} />
+          <span className={cn('truncate', isStreaming && 'animate-pulse')}>{label}</span>
+          <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+        </CollapsibleTrigger>
+      )}
 
       <CollapsibleContent className="data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 overflow-hidden">
         {/* One rail down the left, so a run of steps reads as a sequence rather
-            than as unrelated cards that happen to be stacked. */}
-        <ol className="border-border/70 mt-2 ml-2 space-y-3 border-l pl-4">{children}</ol>
+            than as unrelated cards that happen to be stacked. Bare, the same
+            elements carry no rail and no indent — identical markup, so nothing
+            below remounts when the first tool call arrives. */}
+        <ol
+          data-bare={bare}
+          className={cn('group/rail space-y-3', !bare && 'border-border/70 mt-2 ml-2 border-l pl-4')}
+        >
+          {children}
+        </ol>
       </CollapsibleContent>
     </Collapsible>
   )
@@ -155,7 +171,7 @@ export function TurnActivityStep({ children }: { children: ReactNode }) {
     <li className="relative">
       <span
         aria-hidden
-        className="bg-border absolute top-2.5 -left-[1.3125rem] size-2 rounded-full ring-2 ring-[var(--color-background)]"
+        className="bg-border absolute top-2.5 -left-[1.3125rem] size-2 rounded-full ring-2 ring-[var(--color-background)] group-data-[bare=true]/rail:hidden"
       />
       {children}
     </li>

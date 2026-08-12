@@ -733,14 +733,6 @@ function renderMessageParts(
     const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
     const toolIndices = indices.filter((i) => toolNameOfPart(message.parts[i]) !== null)
 
-    // Thinking with no tool calls is already one folded line of its own.
-    // Wrapping it would stack two rows that say the same thing, one inside the
-    // other.
-    if (toolIndices.length === 0) {
-      output.push(...runs.map(renderRun))
-      return
-    }
-
     output.push(
       <TurnActivity
         key={`activity-${message.id}-${indices[0]}`}

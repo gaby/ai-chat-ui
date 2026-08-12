@@ -168,6 +168,24 @@ async def stream_multi_tool(
     }
 
 
+async def stream_reasoning_then_tool(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaThinkingPart | DeltaToolCall]]:
+    """Thinks for a while, then calls a tool.
+
+    The thinking is paced so the turn spends most of its time before the first
+    tool call — which is what the activity block has to keep counting. Remounted
+    when the tool arrived, its timer restarted and reported only the tool.
+    """
+    if _has_tool_return(messages):
+        yield "Thought about it, then looked it up."
+        return
+    for chunk in ["**Considering the question**\n", "Weighing what to look up.\n\n", "**Deciding**\n"]:
+        yield {0: DeltaThinkingPart(content=chunk)}
+        await asyncio.sleep(0.9)
+    yield {1: DeltaToolCall(name="get_weather", json_args=json.dumps({"city": "Oslo"}))}
+
+
 async def stream_two_step(
     messages: list[ModelMessage], info: AgentInfo
 ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -316,6 +334,7 @@ models: dict[str, object] = {
     "tool": FunctionModel(stream_function=stream_tool),
     "multi-tool": FunctionModel(stream_function=stream_multi_tool),
     "two-step": FunctionModel(stream_function=stream_two_step),
+    "reasoning-tool": FunctionModel(stream_function=stream_reasoning_then_tool),
     "repeated-tool": FunctionModel(stream_function=stream_repeated_tool),
     "error": FunctionModel(stream_function=stream_error),
     "approval": FunctionModel(stream_function=stream_approval),
