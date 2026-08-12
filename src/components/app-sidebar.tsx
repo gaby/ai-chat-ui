@@ -127,12 +127,15 @@ export function AppSidebar() {
     })
   }
 
+  // The entry outlives the dialog on purpose. Clearing it as the dialog closes
+  // blanked the name mid-animation, so the last thing seen of a delete was the
+  // confirmation asking about "Untitled chat". It is only ever read while a
+  // dialog is open, and `handleDeleteClick` replaces it before the next one.
   const handleConfirmDelete = () => {
     if (conversationToDelete) {
       deleteConversation(conversationToDelete.id)
         .then(() => {
           setDeleteDialogOpen(false)
-          setConversationToDelete(null)
           toast.success('Chat deleted successfully')
         })
         .catch((err: unknown) => {

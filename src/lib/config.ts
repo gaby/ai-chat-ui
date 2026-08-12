@@ -5,10 +5,41 @@ export interface RemoteConfig {
   builtinTools: BuiltinTool[]
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isModelConfig(value: unknown): value is ModelConfig {
+  if (!isRecord(value)) return false
+  return (
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    Array.isArray(value.builtinTools) &&
+    value.builtinTools.every((tool) => typeof tool === 'string')
+  )
+}
+
+function isBuiltinTool(value: unknown): value is BuiltinTool {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
+}
+
+/**
+ * The elements are checked, not just the arrays.
+ *
+ * A backend that answers with the right keys and the wrong contents used to pass
+ * here and fail later in render — a model without `name` reaches the select as a
+ * blank option that cannot be told apart from its neighbours, and one without
+ * `id` sends a request the server rejects. Rejecting the response instead puts
+ * the retry banner in front of it.
+ */
 function isRemoteConfig(value: unknown): value is RemoteConfig {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Partial<RemoteConfig>
-  return Array.isArray(candidate.models) && Array.isArray(candidate.builtinTools)
+  if (!isRecord(value)) return false
+  return (
+    Array.isArray(value.models) &&
+    value.models.every(isModelConfig) &&
+    Array.isArray(value.builtinTools) &&
+    value.builtinTools.every(isBuiltinTool)
+  )
 }
 
 /**

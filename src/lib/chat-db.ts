@@ -141,7 +141,9 @@ async function updateConversation(
       let written = false
 
       read.onsuccess = () => {
-        const next = decide(read.result as ConversationEntry | undefined)
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- IDB get() returns untyped data
+        const existing: ConversationEntry | undefined = read.result
+        const next = decide(existing)
         if (next === null) return
         store.put(next)
         written = true
@@ -150,6 +152,13 @@ async function updateConversation(
         resolve(written)
       }
       tx.onerror = () => {
+        reject(new Error(tx.error?.message ?? failureMessage))
+      }
+      // An exception thrown inside `read.onsuccess` aborts the transaction and
+      // fires `abort` alone — no `error`. Without this the promise never
+      // settles, so the caller's `catch` never runs and the await hangs for the
+      // life of the tab.
+      tx.onabort = () => {
         reject(new Error(tx.error?.message ?? failureMessage))
       }
     })
@@ -300,6 +309,13 @@ export async function deleteConversation(conversationId: string): Promise<void> 
       resolve()
     }
     tx.onerror = () => {
+      deletedConversations.delete(conversationId)
+      reject(new Error(tx.error?.message ?? 'Failed to delete conversation'))
+    }
+    // See `updateConversation`: an abort with no error event would otherwise
+    // leave the conversation suppressed by `deletedConversations` with nothing
+    // to roll it back.
+    tx.onabort = () => {
       deletedConversations.delete(conversationId)
       reject(new Error(tx.error?.message ?? 'Failed to delete conversation'))
     }

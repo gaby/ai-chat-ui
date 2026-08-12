@@ -52,12 +52,16 @@ function refresh(): void {
 }
 
 function subscribe(listener: () => void): () => void {
-  if (listeners.size === 0) {
+  // With nobody subscribed there is no `conversations-changed` listener, so any
+  // write in that window is missed. Re-read whenever the first subscriber
+  // arrives — otherwise `loaded` stays true from the previous run and the list
+  // that comes back is however stale the gap left it.
+  const reconnecting = listeners.size === 0
+  if (reconnecting) {
     window.addEventListener('conversations-changed', refresh)
   }
   listeners.add(listener)
-  // First mount reads; later ones join the list already in memory.
-  if (!state.loaded) refresh()
+  if (reconnecting || !state.loaded) refresh()
 
   return () => {
     listeners.delete(listener)

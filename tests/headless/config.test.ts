@@ -36,4 +36,18 @@ describe('fetchConfig', () => {
 
     await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
   })
+
+  it('rejects arrays of the wrong shape', async () => {
+    // Checking only that `models` is an array let a well-formed envelope full of
+    // junk through, and it surfaced as blank options in the model select rather
+    // than as the retry banner.
+    respond({ models: [{ id: 'a' }], builtinTools: [] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+
+    respond({ models: [{ id: 'a', name: 'a', builtinTools: [7] }], builtinTools: [] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+
+    respond({ models: [], builtinTools: ['web_search'] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+  })
 })
