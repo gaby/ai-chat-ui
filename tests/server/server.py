@@ -350,10 +350,20 @@ models: dict[str, object] = {
 SDK_VERSION: Literal[5, 6] = 6
 
 
-# Builtin tools are advertised per model. Only `text` declares one, so specs
-# that select another model keep the plain toolbar.
-BUILTIN_TOOLS = [{"id": "web_search", "name": "Web search"}]
-MODELS_WITH_BUILTIN_TOOLS = {"text"}
+# Builtin tools are advertised per model, so a spec picks the toolbar it wants
+# by picking a model. `text` (the default) declares one, keeping the composer a
+# plain bar for every spec that does not care; `markdown` declares all four,
+# which is past the inline limit and pushes the rest into the overflow menu.
+BUILTIN_TOOLS = [
+    {"id": "web_search", "name": "Web search"},
+    {"id": "code_execution", "name": "Code execution"},
+    {"id": "image_generation", "name": "Image generation"},
+    {"id": "url_context", "name": "URL context"},
+]
+MODEL_BUILTIN_TOOLS = {
+    "text": ["web_search"],
+    "markdown": [tool["id"] for tool in BUILTIN_TOOLS],
+}
 
 
 async def configure(request: Request) -> Response:
@@ -361,7 +371,7 @@ async def configure(request: Request) -> Response:
         {
             "id": f"function:function::{name}",
             "name": name,
-            "builtinTools": [t["id"] for t in BUILTIN_TOOLS] if name in MODELS_WITH_BUILTIN_TOOLS else [],
+            "builtinTools": MODEL_BUILTIN_TOOLS.get(name, []),
         }
         for name in models
     ]

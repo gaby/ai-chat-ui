@@ -39,4 +39,38 @@ test.describe('builtin tools', () => {
     const body = (await requestPromise).postDataJSON() as Record<string, unknown>
     expect(body.builtinTools).toEqual([])
   })
+
+  test('overflow tools carry their on/off state, not just a check icon', async ({ page }) => {
+    await page.goto('/')
+
+    // `markdown` advertises four tools; three fit the bar and the rest move into
+    // the overflow menu.
+    await page
+      .getByRole('combobox')
+      .filter({ hasNotText: /^Effort:/ })
+      .click()
+    await page.getByRole('option', { name: 'markdown', exact: true }).click()
+
+    await page.getByRole('button', { name: 'More tools' }).click()
+
+    // These rows were plain menu items whose state lived in an unlabelled check
+    // icon, so a screen reader read an enabled tool exactly like a disabled one.
+    const urlContext = page.getByRole('menuitemcheckbox', { name: 'URL context' })
+    await expect(urlContext).toHaveAttribute('aria-checked', 'false')
+
+    await urlContext.click()
+    await expect(urlContext).toHaveAttribute('aria-checked', 'true')
+
+    // The menu stays open so several can be flipped in one visit.
+    await expect(urlContext).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    const requestPromise = page.waitForRequest('**/api/chat')
+    const input = page.getByPlaceholder('What would you like to know?')
+    await input.fill('Read that page')
+    await input.press('Enter')
+
+    const body = (await requestPromise).postDataJSON() as Record<string, unknown>
+    expect(body.builtinTools).toEqual(['url_context'])
+  })
 })

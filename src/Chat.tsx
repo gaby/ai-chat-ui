@@ -29,6 +29,7 @@ import { Part } from './Part'
 import type { ThinkingEffort } from '@/lib/generated/thinking-effort.gen'
 import type { BuiltinTool, ConversationEntry, ModelConfig } from './types'
 import { readEffort, writeEffort } from '@/lib/effort'
+import { resolveSelectedModel } from '@/lib/models'
 import { toolNameOfPart } from '@/lib/tool-filters'
 import { COMPLETE_TOOL_STATES, groupParts, type PartRun } from '@/lib/tool-grouping'
 import { getMessages, isConversationDeleted, saveMessages, saveConversation } from '@/lib/chat-db'
@@ -132,10 +133,11 @@ const ChatInner = () => {
   useEffect(() => {
     // A backend with no providers configured returns an empty list; the composer
     // degrades to a disabled model select rather than the chat crashing here.
-    const firstModel = configQuery.data?.models[0]
-    if (firstModel) {
-      setModel(firstModel.id)
-    }
+    const models = configQuery.data?.models
+    // Nothing has come back yet. Leaving the selection alone matters on a failed
+    // refetch, where the last good configuration is still what the backend has.
+    if (!models) return
+    setModel((current) => resolveSelectedModel(models, current))
   }, [configQuery.data])
 
   // Builtin tools are advertised per model, so a tool enabled on one model must

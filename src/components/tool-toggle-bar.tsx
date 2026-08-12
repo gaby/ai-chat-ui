@@ -1,9 +1,9 @@
-import { CheckIcon, ChevronDownIcon } from 'lucide-react'
+import { ChevronDownIcon } from 'lucide-react'
 
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ToolChip } from '@/components/tool-chip'
@@ -61,19 +61,25 @@ export function ToolToggleBar({ tools, enabled, onToggle }: ToolToggleBarProps) 
             <ChevronDownIcon className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
+            {/* Checkbox items, not plain items with a check icon beside them:
+                these carry the same on/off decision as the chips outside, and a
+                bare icon exposes none of it — every row sounded identical to a
+                screen reader whether its tool was on or off. */}
             {overflow.map((tool) => (
-              <DropdownMenuItem
+              <DropdownMenuCheckboxItem
                 key={tool.id}
+                checked={enabled.includes(tool.id)}
                 onSelect={(event) => {
                   // Keep the menu open so several tools can be flipped at once.
                   event.preventDefault()
+                }}
+                onCheckedChange={() => {
                   onToggle(tool.id)
                 }}
               >
                 {getToolIcon(tool.id, 'size-3.5')}
                 <span className="flex-1 truncate">{tool.name}</span>
-                {enabled.includes(tool.id) && <CheckIcon className="text-primary size-3.5" />}
-              </DropdownMenuItem>
+              </DropdownMenuCheckboxItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
