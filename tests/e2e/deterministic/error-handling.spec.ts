@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
+import { sidebar } from '../sidebar'
 import { toolCard } from '../tools'
 
 test.describe('tool errors', () => {
@@ -49,6 +50,21 @@ test.describe('run failures', () => {
     await expect(alert.getByText('request_id=req_')).toBeHidden()
     await alert.getByRole('button', { name: 'Details' }).click()
     await expect(alert.getByText('request_id=req_')).toBeVisible()
+  })
+
+  test('the failure stays behind when the user opens another conversation', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'failure', 'Do something that fails')
+    await expect(page.getByRole('alert')).toBeVisible()
+
+    await sidebar(page).getByRole('link', { name: 'New conversation' }).click()
+
+    // The card is scoped to nothing: while the hook stays in its error state it
+    // renders over whatever is opened next, and its Retry has no message to
+    // re-run there. The welcome screen needs a settled run, so it never appeared
+    // either.
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+    await expect(page.getByRole('alert')).toBeHidden()
   })
 
   test('retry clears the failure and runs again', async ({ page }) => {

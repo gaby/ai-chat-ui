@@ -116,7 +116,7 @@ The UI shows per-reply and per-conversation token counts, read from `UIMessage.m
 { "usage": { "inputTokens": 120, "outputTokens": 30, "totalTokens": 150, "requests": 1, "toolCalls": 0 } }
 ```
 
-`snake_case` keys are accepted too. A backend puts them there by writing `ModelResponse.metadata` before the adapter emits its `message-metadata` chunk — see `UsageEventStream` in `tests/server/server.py` for a working ~20-line implementation. `Agent.to_web()` does not report usage today (it hardcodes `VercelAIAdapter` with no seam), so agents served that way fall back to a locally-derived estimate, which the UI labels with `~`.
+`snake_case` keys are accepted too. A backend puts them there by writing `ModelResponse.metadata` before the adapter emits its `message-metadata` chunk — see `UsageEventStream` in `tests/server/server.py` for a working ~20-line implementation. The figures are per-message, not per-run: when the trailing message a run receives is already an assistant message (an approval continuation), the client keeps that message and deep-merges the new metadata into it, so a backend must add its run's usage to what that message already carries rather than assign it. `Agent.to_web()` does not report usage today (it hardcodes `VercelAIAdapter` with no seam), so agents served that way fall back to a locally-derived estimate, which the UI labels with `~`.
 
 **Builtin Tools:**
 
@@ -142,7 +142,7 @@ File names are kebab-case (`tool-approval-prompt.tsx`); exported component names
 
 `src/components/ui/` (shadcn) and `src/components/ai-elements/` (Vercel AI Elements) are vendored from upstream registries. Treat them as read-only: never modify in place. To customize behavior, wrap the primitive in a new file under `src/components/`. To upgrade, re-run `npx shadcn@latest add <name>` (or `@ai-elements/<name>`) and review the diff.
 
-A small number of pre-existing local modifications survive in these folders (e.g. the Dialog-based error display in `ai-elements/tool.tsx` from #11). Each is tagged with a `// local modification:` comment. Leave those as they are, but don't add new ones — extract a wrapper instead.
+Two normalizations are part of vendoring itself, not local modifications: files are formatted with the repo's Prettier config, and Radix imports use the granular `@radix-ui/react-<name>` package instead of the `radix-ui` umbrella the current shadcn generator emits — the umbrella pins its own copies of internal primitives (react-dismissable-layer, react-focus-scope, react-primitive), which made the single-file offline artifact ship two of each. Apply both when re-vendoring; a diff that consists only of these is not a modification.
 
 ## Configuration
 

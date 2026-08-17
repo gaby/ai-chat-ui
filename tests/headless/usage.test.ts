@@ -1,14 +1,15 @@
-import type { UIMessage } from 'ai'
+import { isToolUIPart, type UIMessage } from 'ai'
 import { describe, expect, it } from 'vitest'
 
+import { TestChat, getServerPort, resolveModelId } from '../chat-client'
 import { conversationUsage, estimateTokens, formatTokens, parseUsage } from '../../src/lib/usage'
 
 function assistant(text: string, metadata?: unknown): UIMessage {
-  return { id: text, role: 'assistant', parts: [{ type: 'text', text }], metadata } as UIMessage
+  return { id: text, role: 'assistant', parts: [{ type: 'text', text }], metadata }
 }
 
 function user(text: string): UIMessage {
-  return { id: text, role: 'user', parts: [{ type: 'text', text }] } as UIMessage
+  return { id: text, role: 'user', parts: [{ type: 'text', text }] }
 }
 
 describe('parseUsage', () => {
@@ -111,13 +112,45 @@ describe('estimateTokens', () => {
   })
 
   it('counts tool arguments and results, not just prose', () => {
-    const withTool = {
+    const withTool: UIMessage = {
       id: 'tool',
       role: 'assistant',
-      parts: [{ type: 'tool-get_weather', toolCallId: '1', state: 'output-available', input: { city: 'London' } }],
-    } as unknown as UIMessage
+      parts: [
+        {
+          type: 'tool-get_weather',
+          toolCallId: '1',
+          state: 'output-available',
+          input: { city: 'London' },
+          output: 'Sunny, 72°F',
+        },
+      ],
+    }
 
     expect(estimateTokens([withTool])).toBeGreaterThan(0)
+  })
+})
+
+describe('usage reported over the wire', () => {
+  it('accumulates both legs of an approval continuation onto the one message', async () => {
+    const port = getServerPort()
+    const model = await resolveModelId(port, 'approval')
+    const chat = new TestChat(port)
+
+    await chat.sendMessage({ text: 'email alice' }, { body: { model } })
+
+    const pending = chat.lastMessage?.parts.find(isToolUIPart)
+    if (pending?.state !== 'approval-requested') throw new Error(`expected an approval, got ${pending?.state}`)
+    const firstLeg = parseUsage(chat.lastMessage?.metadata)
+    expect(firstLeg?.totalTokens).toBeGreaterThan(0)
+
+    await chat.addToolApprovalResponse({ id: pending.approval.id, approved: true })
+    // The client answers an approval by re-sending the same trailing assistant
+    // message, so both runs report into one `UIMessage.metadata`.
+    await chat.sendMessage(undefined, { body: { model } })
+
+    const both = parseUsage(chat.lastMessage?.metadata)
+    expect(both?.totalTokens).toBeGreaterThan(firstLeg!.totalTokens)
+    expect(both?.requests).toBe(2)
   })
 })
 

@@ -1,5 +1,7 @@
 import type { UIMessage } from 'ai'
 
+import { isRecord } from '@/lib/is-record'
+
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
@@ -35,11 +37,10 @@ function readNumber(source: Record<string, unknown>, ...keys: string[]): number 
  * because Python backends emit either.
  */
 export function parseUsage(metadata: unknown): TokenUsage | null {
-  if (metadata === null || typeof metadata !== 'object') return null
-  const raw = (metadata as Record<string, unknown>).usage
-  if (raw === null || typeof raw !== 'object') return null
+  if (!isRecord(metadata)) return null
+  const source = metadata.usage
+  if (!isRecord(source)) return null
 
-  const source = raw as Record<string, unknown>
   const inputTokens = readNumber(source, 'inputTokens', 'input_tokens')
   const outputTokens = readNumber(source, 'outputTokens', 'output_tokens')
   const totalTokens = readNumber(source, 'totalTokens', 'total_tokens') || inputTokens + outputTokens
@@ -90,9 +91,9 @@ function messageCharacters(message: UIMessage): number {
     if (part.type === 'text' || part.type === 'reasoning') {
       characters += part.text.length
     } else if ('toolCallId' in part) {
-      const tool = part as { input?: unknown; output?: unknown }
-      if (tool.input !== undefined) characters += JSON.stringify(tool.input).length
-      if (tool.output !== undefined) characters += JSON.stringify(tool.output).length
+      // Only some of the tool states carry each field, so both are checked.
+      if ('input' in part && part.input !== undefined) characters += JSON.stringify(part.input).length
+      if ('output' in part && part.output !== undefined) characters += JSON.stringify(part.output).length
     }
   }
 

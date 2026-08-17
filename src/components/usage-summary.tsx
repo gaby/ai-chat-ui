@@ -38,6 +38,11 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
   // whose latest reply is the only one that reported would otherwise show that
   // reply's few hundred tokens as the whole conversation's cost.
   const total = reported ? reported.totalTokens + estimatedTokens : estimatedTokens
+  // The split is optional in the shape a backend reports; a total on its own is
+  // valid. Printing the rows regardless asserts "Input 0 / Output 0" as fact
+  // under "Reported by the agent", so the total carries the figure alone — the
+  // same fallback `MessageUsage` applies to the per-reply chip.
+  const hasBreakdown = reported !== null && (reported.inputTokens > 0 || reported.outputTokens > 0)
 
   if (total === 0) return null
 
@@ -58,8 +63,12 @@ export function UsageSummary({ messages }: { messages: UIMessage[] }) {
 
         {reported ? (
           <dl className="divide-border divide-y">
-            <Row label="Input" value={reported.inputTokens.toLocaleString()} />
-            <Row label="Output" value={reported.outputTokens.toLocaleString()} />
+            {hasBreakdown && (
+              <>
+                <Row label="Input" value={reported.inputTokens.toLocaleString()} />
+                <Row label="Output" value={reported.outputTokens.toLocaleString()} />
+              </>
+            )}
             {reported.cacheReadTokens > 0 && (
               <Row label="Cached read" value={reported.cacheReadTokens.toLocaleString()} />
             )}

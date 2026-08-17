@@ -24,13 +24,13 @@ async function failHistoryReads(page: import('@playwright/test').Page) {
     // replacement forwards the `this` it was called with.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const real = IDBDatabase.prototype.transaction
-    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: unknown[]) {
-      const [stores, mode] = args as [string | string[], IDBTransactionMode | undefined]
+    IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...args: Parameters<IDBDatabase['transaction']>) {
+      const [stores, mode] = args
       const names = Array.isArray(stores) ? stores : [stores]
       if (window.failHistoryReads && mode !== 'readwrite' && names.includes('messages')) {
         throw new DOMException('simulated storage failure', 'InvalidStateError')
       }
-      return Reflect.apply(real, this, args) as IDBTransaction
+      return Reflect.apply(real, this, args)
     }
   })
 }

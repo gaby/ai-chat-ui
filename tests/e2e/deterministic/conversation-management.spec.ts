@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { sendMessage } from '../conversation'
+import { chat, sendMessage } from '../conversation'
 import { conversationAction, sidebar } from '../sidebar'
 
 test.describe('conversation management', () => {
@@ -33,5 +33,38 @@ test.describe('conversation management', () => {
     await conversationAction(page, 'Keep me handy', 'Unpin')
 
     await expect(sidebar(page).getByText('Pinned')).toBeHidden()
+  })
+
+  test('opening a conversation without replying leaves it in its date bucket', async ({ page }) => {
+    // Seeded through the localStorage migration: it is the one path that puts a
+    // dated history in the store without sending anything, and the entry has to
+    // be older than the resolution `touchConversation` ignores.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'conversationIds',
+        JSON.stringify([
+          { id: '/aged', firstMessage: 'Aged thread', timestamp: Date.now() - 3 * 24 * 60 * 60 * 1000 },
+        ]),
+      )
+      localStorage.setItem(
+        '/aged',
+        JSON.stringify([{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Aged thread' }] }]),
+      )
+    })
+    await page.goto('/')
+
+    const row = sidebar(page).getByRole('link', { name: /Aged thread/ })
+    await expect(row).toContainText('3d ago')
+
+    await row.click()
+    await expect(chat(page).getByText('Aged thread')).toBeVisible()
+
+    // Leaving is where the pending write is flushed, so a read counted as
+    // activity has already been stamped by the time the next chat is up.
+    await sidebar(page).getByRole('link', { name: 'New conversation' }).click()
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+
+    await expect(sidebar(page).getByText('Previous 7 days')).toBeVisible()
+    await expect(row).toContainText('3d ago')
   })
 })

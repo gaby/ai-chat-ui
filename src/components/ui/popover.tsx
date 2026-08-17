@@ -1,8 +1,4 @@
 import * as React from 'react'
-// local modification: the granular package, not the `radix-ui` umbrella the
-// current shadcn generator emits. The umbrella pins its own copies of
-// react-dismissable-layer / react-focus-scope / react-primitive, so the
-// single-file offline artifact shipped two of each.
 import * as PopoverPrimitive from '@radix-ui/react-popover'
 
 import { cn } from '@/lib/utils'

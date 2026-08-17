@@ -103,9 +103,20 @@ const mathSchema = {
 type RehypePlugins = NonNullable<StreamdownProps['rehypePlugins']>
 type PluginTuple = Extract<RehypePlugins[number], readonly [unknown, ...unknown[]]>
 
-/** The plugin behind one of Streamdown's defaults, reused with our own options. */
+/**
+ * The plugin behind one of Streamdown's defaults, reused with our own options.
+ *
+ * A default is either the plugin itself or a `[plugin, options]` tuple, and the
+ * options are what this module replaces. A preset — the third thing `Pluggable`
+ * allows — has no single plugin to pull out, so it is rejected here rather than
+ * handed to unified, which would fail deeper in with nothing pointing back.
+ */
 function pluginOf(entry: (typeof defaultRehypePlugins)[string]): PluginTuple[0] {
-  return (Array.isArray(entry) ? entry[0] : entry) as PluginTuple[0]
+  const plugin = Array.isArray(entry) ? entry[0] : entry
+  if (typeof plugin !== 'function') {
+    throw new TypeError('Streamdown default rehype plugin is a preset, which carries no single plugin to reuse')
+  }
+  return plugin
 }
 
 // Same plugins in the same order as Streamdown's own list — only the KaTeX

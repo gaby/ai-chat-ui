@@ -47,8 +47,10 @@ interface ToolPartHeaderProps {
 // than throwing mid-render — there is no error boundary above this.
 const UNKNOWN_STATUS: StatusEntry = { label: 'Unknown', icon: CircleDashedIcon, className: 'text-muted-foreground' }
 
-/** Widened view of the map: the key is a string off the wire, not a proven member. */
-const STATUS_BY_KEY = STATUS as Partial<Record<string, StatusEntry>>
+/** The key is typed as one of the seven, but it arrives off the wire, so it is looked up rather than trusted. */
+function statusFor(state: ToolState): StatusEntry {
+  return Object.hasOwn(STATUS, state) ? STATUS[state] : UNKNOWN_STATUS
+}
 
 /**
  * Collapsed row for a tool call. It answers the two questions a reader has
@@ -56,7 +58,7 @@ const STATUS_BY_KEY = STATUS as Partial<Record<string, StatusEntry>>
  * rather than shouting it with a filled badge.
  */
 export function ToolPartHeader({ toolName, state, input, errorText }: ToolPartHeaderProps) {
-  const { label, icon: StatusIcon, className } = STATUS_BY_KEY[state] ?? UNKNOWN_STATUS
+  const { label, icon: StatusIcon, className } = statusFor(state)
   const argumentSummary = useMemo(() => summarizeToolInput(input), [input])
   // On a failed call the reason is what the reader wants from the collapsed
   // row; the arguments are still one click away.

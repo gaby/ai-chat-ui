@@ -8,8 +8,9 @@ interface StreamingDisclosureOptions {
   /** Whether the content is arriving right now. */
   isStreaming: boolean
   /**
-   * Something needs a person — a pending approval, a failed call. Holds the
-   * fold open and cancels the auto-collapse.
+   * Something is there for a person to read or act on — a pending approval, a
+   * call that failed or was denied, a run that stopped partway. Holds the fold
+   * open and cancels the auto-collapse.
    */
   held?: boolean
 }

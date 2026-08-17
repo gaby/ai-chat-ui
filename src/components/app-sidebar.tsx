@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConversationList } from '@/components/conversation-list'
+import { ConversationListError } from '@/components/conversation-list-error'
 import { RenameConversationDialog } from '@/components/rename-conversation-dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,7 +28,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { useConversationIdFromUrl } from '@/hooks/useConversationIdFromUrl'
-import { useConversations } from '@/hooks/useConversations'
+import { retryConversations, useConversationsState } from '@/hooks/useConversations'
 import { stripBasePath, withBasePath } from '@/lib/base-path'
 import { deleteConversation as deleteConv, patchConversation } from '@/lib/chat-db'
 import { conversationTitle } from '@/lib/conversation-title'
@@ -71,7 +72,7 @@ function deleteConversation(conversationId: string) {
 
 export function AppSidebar() {
   const { setOpenMobile } = useSidebar()
-  const conversations = useConversations()
+  const { conversations, failed } = useConversationsState()
   const [conversationId] = useConversationIdFromUrl()
   const [query, setQuery] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -188,9 +189,13 @@ export function AppSidebar() {
       <SidebarContent className="custom-scrollbar">
         {filtered.length === 0 ? (
           <SidebarGroup>
-            <p className="text-muted-foreground px-2 py-6 text-center text-xs group-data-[state=collapsed]:hidden">
-              {conversations.length === 0 ? 'No conversations yet.' : 'No conversations match your search.'}
-            </p>
+            {failed ? (
+              <ConversationListError onRetry={retryConversations} />
+            ) : (
+              <p className="text-muted-foreground px-2 py-6 text-center text-xs group-data-[state=collapsed]:hidden">
+                {conversations.length === 0 ? 'No conversations yet.' : 'No conversations match your search.'}
+              </p>
+            )}
           </SidebarGroup>
         ) : (
           <ConversationList

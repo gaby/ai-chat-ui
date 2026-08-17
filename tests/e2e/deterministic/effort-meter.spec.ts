@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { sendMessage } from '../conversation'
+import { requestBody, sendMessage } from '../conversation'
 
 test.describe('effort meter', () => {
   test('shows every effort level with what it means', async ({ page }) => {
@@ -27,7 +27,7 @@ test.describe('effort meter', () => {
     await sendMessage(page, 'text', 'hello effort')
     const request = await requestPromise
 
-    const body = request.postDataJSON() as Record<string, unknown>
+    const body = requestBody(request)
     expect(body.effort).toBe('high')
     expect(body.model).toBeTruthy()
 
@@ -42,7 +42,7 @@ test.describe('effort meter', () => {
     await sendMessage(page, 'text', 'hello default effort')
     const request = await requestPromise
 
-    const body = request.postDataJSON() as Record<string, unknown>
+    const body = requestBody(request)
     expect(body.effort).toBe('medium')
     expect(body.model).toBeTruthy()
 

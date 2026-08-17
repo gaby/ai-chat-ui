@@ -70,5 +70,13 @@ test.describe('token usage', () => {
     await expect(page.getByTitle('Total tokens for this reply')).toBeVisible()
     await expect(page.getByTitle('Total tokens for this reply')).not.toContainText(/^0 /)
     await expect(page.getByTitle(/input, .* output/)).toHaveCount(0)
+
+    // The popover presents its rows as what the agent reported, so a split it
+    // never sent must be absent rather than zero.
+    await page.getByRole('button', { name: 'Token usage' }).click()
+    await expect(page.getByText('Reported by the agent.')).toBeVisible()
+    await expect(page.getByLabel('Total tokens')).not.toHaveText('0')
+    await expect(page.getByLabel('Input tokens')).toHaveCount(0)
+    await expect(page.getByLabel('Output tokens')).toHaveCount(0)
   })
 })

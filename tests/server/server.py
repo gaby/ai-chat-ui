@@ -387,6 +387,35 @@ async def stream_repeated_approval(
     }
 
 
+async def stream_reasoning_then_approval(
+    messages: list[ModelMessage], info: AgentInfo
+) -> AsyncIterator[str | dict[int, DeltaThinkingPart | DeltaToolCall]]:
+    """Thinks for a while, then asks for approval — a long leg, then a short one.
+
+    The turn's clock runs in two intervals with the wait for the user between
+    them, and almost all of the work is in the first. A total that reports only
+    the interval after the approval is off by seconds, which the other approval
+    fixtures cannot show: they emit their tool call immediately, so both of
+    their intervals round to the same second.
+    """
+    if _has_tool_return_for(messages, "send_email"):
+        outcome = _tool_return_outcome(messages, "send_email")
+        if outcome == "denied":
+            yield "The email was not sent because you denied the request."
+        else:
+            yield "The email has been sent successfully."
+        return
+    for chunk in ["**Drafting the message**\n", "Working out who it should go to.\n\n", "**Ready to send**\n"]:
+        yield {0: DeltaThinkingPart(content=chunk)}
+        await asyncio.sleep(0.9)
+    yield {
+        1: DeltaToolCall(
+            name="send_email",
+            json_args=json.dumps({"to": "alice@example.com", "body": "Hello from the test!"}),
+        )
+    }
+
+
 models: dict[str, object] = {
     "text": FunctionModel(stream_function=stream_text),
     # Same reply as `text`; the difference is on the wire, where its usage
@@ -406,6 +435,7 @@ models: dict[str, object] = {
     "approval-slow": FunctionModel(stream_function=stream_approval_slow),
     "approval-error": FunctionModel(stream_function=stream_approval_error),
     "repeated-approval": FunctionModel(stream_function=stream_repeated_approval),
+    "reasoning-approval": FunctionModel(stream_function=stream_reasoning_then_approval),
     "run-code": FunctionModel(stream_function=stream_run_code),
     "sourced-tools": FunctionModel(stream_function=stream_sourced_tools),
     "interleaved": FunctionModel(stream_function=stream_interleaved),
@@ -447,11 +477,16 @@ async def configure(request: Request) -> Response:
 
 
 class UsageEventStream(VercelAIEventStream):
-    """Attach the run's token usage to the assistant message's metadata.
+    """Attach the conversation turn's token usage to the assistant message's metadata.
 
     The adapter already merges `ModelResponse.metadata` into the `message-metadata`
     chunk, so writing there is all it takes for `UIMessage.metadata.usage` to reach
     the browser. Keys are camelCase to match the rest of the wire format.
+
+    Answering an approval starts a second run against the same assistant message,
+    and the client deep-merges each `message-metadata` chunk into the one it
+    already has — so a run reports its own usage plus whatever is already on that
+    message, or the second run silently erases the first run's tokens.
     """
 
     #: Report only `totalTokens`, the minimum the UI accepts. The breakdown is
@@ -476,10 +511,18 @@ class UsageEventStream(VercelAIEventStream):
                 title="Lisbon forecast",
             )
 
+    def _carried_usage(self) -> dict[str, int]:
+        """Usage already on the assistant message this run is about to write to."""
+        last = self.run_input.messages[-1]
+        if last.role != "assistant" or not isinstance(last.metadata, dict):
+            return {}
+        carried = last.metadata.get("usage")
+        return carried if isinstance(carried, dict) else {}
+
     async def handle_run_result(self, event):  # type: ignore[override]
         usage = event.result.usage
         response = event.result.response
-        reported = (
+        run = (
             {"totalTokens": usage.total_tokens}
             if self.total_only
             else {
@@ -492,6 +535,8 @@ class UsageEventStream(VercelAIEventStream):
                 "toolCalls": usage.tool_calls,
             }
         )
+        carried = self._carried_usage()
+        reported = {key: value + carried.get(key, 0) for key, value in run.items()}
         response.metadata = {**(response.metadata or {}), "usage": reported}
         async for chunk in super().handle_run_result(event):
             yield chunk

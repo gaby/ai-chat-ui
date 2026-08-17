@@ -4,7 +4,7 @@ const STORAGE_KEY = 'effort'
 const DEFAULT_EFFORT: ThinkingEffort = 'medium'
 
 function isThinkingEffort(value: string): value is ThinkingEffort {
-  return (THINKING_EFFORT_LEVELS as readonly string[]).includes(value)
+  return THINKING_EFFORT_LEVELS.some((level) => level === value)
 }
 
 /**

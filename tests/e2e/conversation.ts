@@ -1,7 +1,26 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Locator, Page, Request } from '@playwright/test'
 
 export function chat(page: Page): Locator {
   return page.getByRole('log')
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * The JSON body of a captured request.
+ *
+ * `postDataJSON()` is typed `any`, so every field read off it goes unchecked.
+ * Narrowing once here means a spec that asserts on a body which never arrived
+ * fails on the body rather than on a bare `undefined` several lines later.
+ */
+export function requestBody(request: Request): Record<string, unknown> {
+  const body: unknown = request.postDataJSON()
+  if (!isJsonObject(body)) {
+    throw new Error('Request did not carry a JSON object body')
+  }
+  return body
 }
 
 export async function sendMessage(page: Page, model: string, message: string) {

@@ -1,12 +1,9 @@
+import { isRecord } from '@/lib/is-record'
 import type { BuiltinTool, ModelConfig } from '@/types'
 
 export interface RemoteConfig {
   models: ModelConfig[]
   builtinTools: BuiltinTool[]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function isModelConfig(value: unknown): value is ModelConfig {

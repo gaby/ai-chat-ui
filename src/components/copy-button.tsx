@@ -3,8 +3,22 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { MessageAction } from '@/components/message-action'
+import { isRecord } from '@/lib/is-record'
 
 const RESET_DELAY = 1500
+
+/**
+ * `navigator.clipboard` when there is really one there.
+ *
+ * It is typed as always present but is absent outside a secure context, and the
+ * offline artifact is meant to be served over plain http — where reading
+ * `.writeText` off it throws synchronously, past any `.catch` on the promise it
+ * never returns.
+ */
+function availableClipboard(): Clipboard | undefined {
+  const api: unknown = navigator.clipboard
+  return isRecord(api) && typeof api.writeText === 'function' ? navigator.clipboard : undefined
+}
 
 /**
  * Copy action that confirms itself: without the tick, a click on a silent icon
@@ -22,10 +36,7 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
   )
 
   const copy = () => {
-    // Typed as always present, but absent outside a secure context — and the
-    // offline artifact is meant to be served over plain http, where reading
-    // `.writeText` off it throws synchronously, past the `.catch` below.
-    const clipboard = navigator.clipboard as Clipboard | undefined
+    const clipboard = availableClipboard()
     if (!clipboard) {
       toast.error('Copying needs a secure (https) connection.')
       return

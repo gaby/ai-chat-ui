@@ -3,9 +3,9 @@ import { ToolSection } from '@/components/tool-section'
 /**
  * A failed tool call, shown where it happened.
  *
- * The message used to sit behind a "View Error" button that opened a modal —
- * two clicks and a context switch to read the one thing that explains why the
- * run went the way it did. It reads inline now, in the card it belongs to.
+ * The message reads inline, in the card it belongs to: it is the one thing that
+ * explains why the run went the way it did, so it is not worth a click and a
+ * context switch to reach.
  */
 export function ToolError({ errorText }: { errorText: string }) {
   return (

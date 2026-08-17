@@ -23,11 +23,13 @@ function notifyConversationsChanged(): void {
 function openDatabase(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
 
-  dbPromise = new Promise((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
+    // `indexedDB.open` throws rather than rejecting when the connection cannot
+    // be requested at all (storage disabled, a browser-closed connection), and
+    // the throw lands here as a rejection.
     const request = window.indexedDB.open(DB_NAME, DB_VERSION)
 
     request.onerror = () => {
-      dbPromise = null
       reject(new Error(request.error?.message ?? 'Failed to open database'))
     }
     request.onsuccess = () => {
@@ -51,7 +53,41 @@ function openDatabase(): Promise<IDBDatabase> {
     }
   })
 
-  return dbPromise
+  dbPromise = opening
+  // A failure is never cached, or every later caller — including the retry the
+  // reader just asked for — is handed the same rejection for the life of the
+  // tab. It has to be cleared from out here: the executor runs before the
+  // assignment above, so anything it clears is put straight back. The identity
+  // check leaves a newer connection alone.
+  void opening.catch(() => {
+    if (dbPromise === opening) dbPromise = null
+  })
+
+  return opening
+}
+
+/**
+ * A promise for the transaction's outcome.
+ *
+ * Settled on the transaction, never on its requests. A commit that fails —
+ * quota exceeded, disk error, a connection closed under it — aborts *after*
+ * every request has already reported success, so a request-level `onsuccess`
+ * reports a write that is not in the store. An abort also frequently carries no
+ * error event at all, which would leave a promise waiting on `onerror` alone
+ * unsettled for the life of the tab.
+ */
+function transactionDone(tx: IDBTransaction, failureMessage: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      resolve()
+    }
+    tx.onerror = () => {
+      reject(new Error(tx.error?.message ?? failureMessage))
+    }
+    tx.onabort = () => {
+      reject(new Error(tx.error?.message ?? failureMessage))
+    }
+  })
 }
 
 export async function getConversations(): Promise<ConversationEntry[]> {
@@ -93,18 +129,10 @@ export async function saveConversation(
 
   try {
     const db = await openDatabase()
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
-      const store = tx.objectStore(CONVERSATIONS_STORE)
-      const request = store.put(conversation)
+    const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+    tx.objectStore(CONVERSATIONS_STORE).put(conversation)
+    await transactionDone(tx, 'Failed to save conversation')
 
-      request.onerror = () => {
-        reject(new Error(request.error?.message ?? 'Failed to save conversation'))
-      }
-      request.onsuccess = () => {
-        resolve()
-      }
-    })
     lastKnownActivity.set(conversation.id, conversation.timestamp)
     if (notify) notifyConversationsChanged()
   } catch (error) {
@@ -128,43 +156,34 @@ export async function saveConversation(
 async function updateConversation(
   conversationId: string,
   decide: (existing: ConversationEntry | undefined) => ConversationEntry | null,
-  { failureMessage, toastOnFailure = true }: { failureMessage: string; toastOnFailure?: boolean },
+  {
+    failureMessage,
+    toastOnFailure = true,
+    notify = true,
+  }: { failureMessage: string; toastOnFailure?: boolean } & SaveConversationOptions,
 ): Promise<boolean> {
   if (deletedConversations.has(conversationId)) return false
 
   try {
     const db = await openDatabase()
-    const wrote = await new Promise<boolean>((resolve, reject) => {
-      const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
-      const store = tx.objectStore(CONVERSATIONS_STORE)
-      const read = store.get(conversationId)
-      let written = false
+    const tx = db.transaction(CONVERSATIONS_STORE, 'readwrite')
+    const store = tx.objectStore(CONVERSATIONS_STORE)
+    const read = store.get(conversationId)
+    // Set from the callback below, read once the transaction has settled.
+    const write = { happened: false }
 
-      read.onsuccess = () => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- IDB get() returns untyped data
-        const existing: ConversationEntry | undefined = read.result
-        const next = decide(existing)
-        if (next === null) return
-        store.put(next)
-        written = true
-      }
-      tx.oncomplete = () => {
-        resolve(written)
-      }
-      tx.onerror = () => {
-        reject(new Error(tx.error?.message ?? failureMessage))
-      }
-      // An exception thrown inside `read.onsuccess` aborts the transaction and
-      // fires `abort` alone — no `error`. Without this the promise never
-      // settles, so the caller's `catch` never runs and the await hangs for the
-      // life of the tab.
-      tx.onabort = () => {
-        reject(new Error(tx.error?.message ?? failureMessage))
-      }
-    })
+    read.onsuccess = () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- IDB get() returns untyped data
+      const existing: ConversationEntry | undefined = read.result
+      const next = decide(existing)
+      if (next === null) return
+      store.put(next)
+      write.happened = true
+    }
+    await transactionDone(tx, failureMessage)
 
-    if (wrote) notifyConversationsChanged()
-    return wrote
+    if (write.happened && notify) notifyConversationsChanged()
+    return write.happened
   } catch (error) {
     if (toastOnFailure) {
       toast.error('Failed to save conversation. Your browser storage may be full or unavailable.')
@@ -203,13 +222,18 @@ export async function patchConversation(
  * from. Sending there now gives it an entry.
  *
  * Insert-only, so it cannot overwrite the title, pin or activity stamp of a
- * conversation that does exist.
+ * conversation that does exist. Resolves to whether it inserted anything.
  */
-export async function ensureConversationEntry(conversation: ConversationEntry): Promise<void> {
+export async function ensureConversationEntry(
+  conversation: ConversationEntry,
+  { notify = true }: SaveConversationOptions = {},
+): Promise<boolean> {
   const inserted = await updateConversation(conversation.id, (existing) => (existing ? null : conversation), {
     failureMessage: 'Failed to create conversation',
+    notify,
   })
   if (inserted) lastKnownActivity.set(conversation.id, conversation.timestamp)
+  return inserted
 }
 
 // Below this, a rewrite would not change what any reader displays, so the churn
@@ -287,39 +311,23 @@ export async function deleteConversation(conversationId: string): Promise<void> 
   deletedConversations.add(conversationId)
   lastKnownActivity.delete(conversationId)
 
-  let db: IDBDatabase
   try {
-    db = await openDatabase()
+    const db = await openDatabase()
+    const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
+    tx.objectStore(CONVERSATIONS_STORE).delete(conversationId)
+    tx.objectStore(MESSAGES_STORE).delete(conversationId)
+    await transactionDone(tx, 'Failed to delete conversation')
+
+    notifyConversationsChanged()
   } catch (error) {
+    // Every way this can fail rolls the suppression back from one place,
+    // including a `db.transaction()` that throws synchronously — on a
+    // browser-closed connection it does, before any handler of ours exists.
+    // A conversation that is still there has to stay writable, or its own saves
+    // silently return for the rest of the session.
     deletedConversations.delete(conversationId)
     throw error
   }
-
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
-
-    const convStore = tx.objectStore(CONVERSATIONS_STORE)
-    convStore.delete(conversationId)
-
-    const msgStore = tx.objectStore(MESSAGES_STORE)
-    msgStore.delete(conversationId)
-
-    tx.oncomplete = () => {
-      notifyConversationsChanged()
-      resolve()
-    }
-    tx.onerror = () => {
-      deletedConversations.delete(conversationId)
-      reject(new Error(tx.error?.message ?? 'Failed to delete conversation'))
-    }
-    // See `updateConversation`: an abort with no error event would otherwise
-    // leave the conversation suppressed by `deletedConversations` with nothing
-    // to roll it back.
-    tx.onabort = () => {
-      deletedConversations.delete(conversationId)
-      reject(new Error(tx.error?.message ?? 'Failed to delete conversation'))
-    }
-  })
 }
 
 export async function getMessages(conversationId: string): Promise<UIMessage[] | null> {
@@ -348,29 +356,37 @@ interface SaveMessagesOptions {
    * collapse the whole sidebar into "Just now".
    */
   touch?: boolean
+  /**
+   * Whether to leave a history that is already stored alone. On for restores
+   * (the localStorage migration), where the stored copy is by definition the
+   * newer one — it is what the conversation has been used for since.
+   */
+  insertOnly?: boolean
 }
 
 export async function saveMessages(
   conversationId: string,
   messages: UIMessage[],
-  { touch = true }: SaveMessagesOptions = {},
+  { touch = true, insertOnly = false }: SaveMessagesOptions = {},
 ): Promise<void> {
   if (deletedConversations.has(conversationId)) return
 
   try {
     const db = await openDatabase()
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-      const store = tx.objectStore(MESSAGES_STORE)
-      const request = store.put({ id: conversationId, messages })
+    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    const store = tx.objectStore(MESSAGES_STORE)
 
-      request.onerror = () => {
-        reject(new Error(request.error?.message ?? 'Failed to save messages'))
+    if (insertOnly) {
+      // Read and write in the one transaction, so nothing can store a history
+      // between the two and have it overwritten here.
+      const read = store.get(conversationId)
+      read.onsuccess = () => {
+        if (read.result === undefined) store.put({ id: conversationId, messages })
       }
-      request.onsuccess = () => {
-        resolve()
-      }
-    })
+    } else {
+      store.put({ id: conversationId, messages })
+    }
+    await transactionDone(tx, 'Failed to save messages')
   } catch (error) {
     toast.error('Failed to save messages. Your browser storage may be full or unavailable.')
     throw error
@@ -401,29 +417,36 @@ export async function migrateFromLocalStorage(): Promise<boolean> {
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
   const conversations: ConversationEntry[] = JSON.parse(conversationsJson)
-  const migratedKeys: string[] = []
   let wrote = false
 
   try {
-    for (const conv of conversations) {
-      // One refresh at the end of the batch, not one per entry.
-      await saveConversation(conv, { notify: false })
-      wrote = true
+    for (const [index, conv] of conversations.entries()) {
+      // Insert-only, both here and for the history below. A batch that fails
+      // partway leaves the completion flag unset, so the next load runs this
+      // again — and by then the user has had a whole session to rename, pin,
+      // and add messages to what did land. Overwriting is how a migration that
+      // half-worked turns into one that undoes the day's work every reload.
+      // The single refresh at the end of the batch is unrelated: it is there so
+      // N conversations do not cost N growing re-reads.
+      if (await ensureConversationEntry(conv, { notify: false })) wrote = true
 
       const messagesJson = localStorage.getItem(conv.id)
       if (messagesJson) {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns untyped data
         const messages: UIMessage[] = JSON.parse(messagesJson)
         // Restoring history is not activity: keep each conversation's own timestamp.
-        await saveMessages(conv.id, messages, { touch: false })
-        migratedKeys.push(conv.id)
+        await saveMessages(conv.id, messages, { touch: false, insertOnly: true })
       }
+
+      // Struck off the legacy list the moment it is safely in IndexedDB, so a
+      // later run is only ever offered what has not made it across yet.
+      // Insert-only writes keep an edit safe; only forgetting the entry keeps a
+      // *deletion* safe, since nothing in storage distinguishes "deleted after
+      // it was migrated" from "not migrated yet".
+      localStorage.removeItem(conv.id)
+      localStorage.setItem('conversationIds', JSON.stringify(conversations.slice(index + 1)))
     }
 
-    // Clean up localStorage only after all IDB writes succeeded
-    for (const key of migratedKeys) {
-      localStorage.removeItem(key)
-    }
     localStorage.removeItem('conversationIds')
     localStorage.setItem(migrationKey, 'true')
   } finally {

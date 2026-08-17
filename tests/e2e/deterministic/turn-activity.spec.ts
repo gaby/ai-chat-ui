@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { sendMessage } from '../conversation'
-import { showActivity, toolCard } from '../tools'
+import { afterAutoCollapse, showActivity, toolCard } from '../tools'
 
 test.describe('turn activity', () => {
   test('folds a turn`s tool calls into one line that still names them', async ({ page }) => {
@@ -13,6 +13,11 @@ test.describe('turn activity', () => {
     const activity = page.getByTestId('turn-activity')
     await expect(activity).toContainText('get_weather, calculate')
     await expect(toolCard(page, 'get_weather')).toBeHidden()
+
+    // The line is the control's name as well as its text, so it can be spoken
+    // to reach it (WCAG 2.5.3) and heard when it is reached. A name that says
+    // only what the control does hides everything the turn reports.
+    await expect(page.getByRole('button', { name: /^Show activity: .*get_weather, calculate$/ })).toBeVisible()
 
     await showActivity(page)
     await expect(toolCard(page, 'get_weather')).toBeVisible()
@@ -83,6 +88,11 @@ test.describe('turn activity', () => {
     // A decision to make is not something to fold away: the prompt stays on
     // screen, and there is no "Show activity" control because nothing is hidden.
     await expect(page.getByTestId('turn-activity')).toContainText('Waiting for your approval')
+
+    // Taken on the far side of the collapse the turn would otherwise have done.
+    // Taken before it, both assertions resolve while the timer is still
+    // pending, and pass whether or not anything holds the block open.
+    await afterAutoCollapse(page)
     await expect(page.getByText('This tool requires your approval to run')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Show activity' })).toHaveCount(0)
   })
@@ -93,7 +103,51 @@ test.describe('turn activity', () => {
     await expect(page.getByText('The tool encountered an error.')).toBeVisible()
 
     await expect(page.getByTestId('turn-activity')).toContainText('Ran into a problem')
+    await afterAutoCollapse(page)
     await expect(toolCard(page, 'get_weather')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Show activity' })).toHaveCount(0)
+  })
+
+  test('folding a turn hides its steps without discarding them', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'reasoning-tool', 'Think, then look it up')
+    await expect(page.getByText('Thought about it, then looked it up.')).toBeVisible()
+
+    await showActivity(page)
+    const card = toolCard(page, 'get_weather')
+    await card
+      .getByRole('button', { name: /get_weather/ })
+      .first()
+      .click()
+    await expect(card.getByRole('heading', { name: 'Arguments' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Hide activity' }).click()
+    await expect(card.getByRole('heading', { name: 'Arguments' })).toBeHidden()
+
+    // Reopened, the steps are the ones that were there: the trace still reports
+    // the time it measured, and the card the reader expanded is still expanded.
+    // Rebuilt from scratch instead, the trace has no clock to report and reads
+    // "Thinking completed", and every card is closed again.
+    await page.getByRole('button', { name: 'Show activity' }).click()
+    await expect(page.getByText(/Thought for \d+s/)).toBeVisible()
+    await expect(card.getByRole('heading', { name: 'Arguments' })).toBeVisible()
+  })
+
+  test('counts the work from before an approval as well as after', async ({ page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'reasoning-approval', 'Draft it and send it')
+
+    const card = toolCard(page, 'send_email')
+    await card.getByRole('button', { name: 'Approve' }).click()
+    await expect(page.getByText('The email has been sent successfully.')).toBeVisible()
+
+    // The fixture thinks for about 2.7s before it asks, and answers in a
+    // fraction of a second once allowed. The clock stops for the wait and runs
+    // again on the continuation, so the total has to carry both legs — kept
+    // only for the last one, this reports 1s.
+    const trigger = page.getByRole('button', { name: /activity/ })
+    await expect(trigger).toContainText(/Worked for \d+s/)
+    expect(Number(/Worked for (\d+)s/.exec(await trigger.innerText())?.[1])).toBeGreaterThanOrEqual(2)
   })
 
   test('counts the thinking that came before the first tool call', async ({ page }) => {

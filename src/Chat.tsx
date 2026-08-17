@@ -14,7 +14,7 @@ import { UsageSummary } from '@/components/usage-summary'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { TurnActivity, TurnActivityStep } from '@/components/turn-activity'
 import { ToolFiltersProvider, useToolFilters } from '@/contexts/tool-filters'
-import { useChat } from '@ai-sdk/react'
+import { Chat as ChatSession, useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import type { UIDataTypes, UIMessage, UIMessagePart, UITools } from 'ai'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
@@ -64,18 +64,25 @@ const ChatInner = () => {
         body: () => ({ model: modelRef.current, builtinTools: enabledToolsRef.current, effort: effortRef.current }),
       }),
   )
-  const { messages, sendMessage, status, setMessages, regenerate, error, clearError, addToolApprovalResponse, stop } =
-    useChat({
+  // The session is owned here rather than left to `useChat` for two reasons:
+  // the array it stores is only readable back off the session itself, and an
+  // abandoned run can only be cut loose by handing the hook a different one.
+  const createSession = () =>
+    new ChatSession<UIMessage>({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     })
+  const [session, setSession] = useState(createSession)
+  // Every message write goes through this, never through a session captured by
+  // a render: the conversation-change effect can swap sessions and then install
+  // a history from a read that lands before React has re-rendered.
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const { messages, sendMessage, status, regenerate, error, clearError, addToolApprovalResponse, stop } = useChat({
+    chat: session,
+  })
   const [conversationId, setConversationId] = useConversationIdFromUrl()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  // `stop` is not referentially stable, and the conversation-change effect must
-  // not re-run just because a new one arrived.
-  const stopRef = useRef(stop)
-  stopRef.current = stop
 
   // Set when a send creates a conversation, so the id change it triggers is not
   // mistaken for navigating away from one.
@@ -92,10 +99,14 @@ const ChatInner = () => {
   const snapshot = useMemo(() => ({ id: loadedConversationId, messages }), [loadedConversationId, messages])
   const throttled = useThrottle(snapshot, 500)
 
-  // The exact array handed to `setMessages` by a load. The save effect fires on
-  // that echo too, so without this, opening a conversation rewrote its whole
+  // The array the session holds immediately after a load — read back off the
+  // session, because assigning `messages` stores a copy and the UI is handed
+  // that copy, not the array the load produced. The save effect fires on the
+  // load's echo too, so without this, opening a conversation rewrote its whole
   // history back to IndexedDB and stamped it as activity — a thread read but
-  // not replied to jumped out of "Older" to the top of the sidebar.
+  // not replied to jumped out of "Older" to the top of the sidebar. Identity is
+  // enough to tell the echo apart: every SDK write (push, replace, assign)
+  // installs a new array, so the first real change breaks the match.
   const loadedMessagesRef = useRef<UIMessage[] | null>(null)
 
   // The conversation-change effect keys off `conversationId` alone, but has to
@@ -109,8 +120,8 @@ const ChatInner = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const editDraftsRef = useRef(new Map<string, string>())
   const [pendingEdit, setPendingEdit] = useState<{ messageId: string; text: string } | null>(null)
-  // Deferred send: set this ref, then call setMessages. The useEffect below
-  // will fire sendMessage after the messages state has been committed.
+  // Deferred send: set this ref, then truncate the messages. The useEffect
+  // below will fire sendMessage after that truncation has been committed.
   // The model and tools are deliberately absent: the transport reads them from
   // their refs at request time, so a copy taken when the send was queued would
   // only be a second source of truth that nobody consults.
@@ -160,6 +171,12 @@ const ChatInner = () => {
 
     setEditingMessageId(null)
     setLoadFailed(false)
+    // Nothing else leaves the `error` status: assigning `messages` touches only
+    // messages, `stop` returns early unless a run is live, and this component
+    // stays mounted across navigation. Left set, one failed run's card renders
+    // over every conversation opened afterwards, and suppresses the welcome
+    // screen on the new chat that follows it.
+    sessionRef.current.clearError()
 
     // A deferred send belongs to one conversation. Leaving before its history
     // arrives abandons it: left in place it suppresses the welcome screen on
@@ -190,7 +207,22 @@ const ChatInner = () => {
     // Abandon any run still streaming into the conversation we are leaving.
     // Without this the SDK keeps appending its chunks, and they land in
     // whichever conversation is now on screen.
-    void stopRef.current()
+    //
+    // `stop()` only fires the abort. The chunks already queued behind it still
+    // drain — the stream job never consults the abort signal — and each one
+    // writes into whatever list the session holds by then, which is the next
+    // conversation's. Retiring the session is what makes those writes inert:
+    // they go on landing in an object nothing renders, persists or sends.
+    // Emptying it first also keeps its auto-send predicate from firing a
+    // request of its own once the run tears down.
+    let session = sessionRef.current
+    if (session.status === 'streaming' || session.status === 'submitted') {
+      void session.stop()
+      session.messages = []
+      session = createSession()
+      sessionRef.current = session
+      setSession(session)
+    }
 
     // Flush before clearing. `useThrottle` cancels its pending write whenever
     // the value changes, and the clear below changes it — so leaving within
@@ -215,16 +247,19 @@ const ChatInner = () => {
     // Clear first either way: leaving the old messages mounted while the read is
     // in flight shows the previous conversation under this one's title, and the
     // save effect would then persist them under this id.
-    setMessages([])
+    session.messages = []
+    loadedMessagesRef.current = null
     setLoadedConversationId(conversationId === '/' ? '/' : null)
 
     if (conversationId !== '/') {
       getMessages(conversationId)
         .then((storedMessages) => {
           if (superseded) return
-          const loaded = storedMessages ?? []
-          loadedMessagesRef.current = loaded
-          setMessages(loaded)
+          session.messages = storedMessages ?? []
+          // Read back rather than keeping the array just assigned: the setter
+          // stores a copy, and the save effect's echo test compares identity
+          // against the copy the UI is handed.
+          loadedMessagesRef.current = session.messages
           setLoadedConversationId(conversationId)
 
           // Auto-send the forked message once its own conversation is loaded.
@@ -317,22 +352,22 @@ const ChatInner = () => {
    * Send `text` once `messages` has been truncated to `keep` entries.
    *
    * The order matters and is easy to get subtly wrong by hand: the ref has to be
-   * set before `setMessages`, and the trigger bumped in a later macrotask so the
-   * truncation is committed before the send effect reads it. Four call sites had
-   * a copy each.
+   * set before the truncation, and the trigger bumped in a later macrotask so
+   * the truncation is committed before the send effect reads it. Four call sites
+   * had a copy each.
    */
   const queueSend = useCallback(
     (text: string, keep: number) => {
       pendingSendRef.current = { text, conversationId }
-      setMessages(messagesRef.current.slice(0, keep))
+      sessionRef.current.messages = messagesRef.current.slice(0, keep)
       setTimeout(() => {
         setSendTrigger((n) => n + 1)
       }, 0)
     },
-    [conversationId, setMessages],
+    [conversationId],
   )
 
-  // Fires deferred sendMessage after setMessages has been committed
+  // Fires deferred sendMessage after the truncated messages have been committed
   useEffect(() => {
     if (!pendingSendRef.current) return
     const pending = pendingSendRef.current
@@ -391,6 +426,12 @@ const ChatInner = () => {
   // Retry: re-run the last user message, discarding everything generated after
   // it (partial assistant text, in-progress tool parts, whole tool-loop turns).
   const handleRetry = useCallback(() => {
+    // First, and unconditionally: with no user message to re-run there is
+    // nothing to send, but leaving the error state is still what the button
+    // says it does. Bailing before this left the card sitting there, the click
+    // doing nothing at all.
+    clearError()
+
     let i = messages.length - 1
     while (i >= 0 && messages[i].role !== 'user') i--
     if (i === -1) return
@@ -399,7 +440,6 @@ const ChatInner = () => {
     const textPart = userMessage.parts.find((p) => p.type === 'text')
     const text = textPart && 'text' in textPart ? textPart.text : ''
 
-    clearError()
     // Drop the user message too; the deferred send re-adds it cleanly.
     queueSend(text, i)
   }, [messages, clearError, queueSend])
@@ -409,6 +449,12 @@ const ChatInner = () => {
   // with no output; pydantic-ai rejects an orphaned tool call, so drop that
   // trailing assistant message first.
   const handleContinue = useCallback(() => {
+    // The same lockout `handleSubmit` is under. The card is on screen while a
+    // conversation's history has failed to read or is still in flight, and from
+    // there this would post `continue` with no history behind it and no way to
+    // persist the reply.
+    if (loadedConversationId !== conversationId) return
+
     const lastMessage = messages.at(-1)
     if (lastMessage?.role === 'assistant' && hasIncompleteToolPart(lastMessage.parts)) {
       clearError()
@@ -420,7 +466,7 @@ const ChatInner = () => {
     sendMessage({ text: 'continue' }).catch((error: unknown) => {
       console.error('Error continuing message:', error)
     })
-  }, [messages, clearError, setMessages, sendMessage, model, enabledTools, conversationId])
+  }, [messages, clearError, sendMessage, queueSend, loadedConversationId, conversationId])
 
   const handleFork = useCallback(() => {
     if (!pendingEdit) return
@@ -777,7 +823,10 @@ function renderMessageParts(
 
     const { runs } = item
     const indices = runs.flatMap((run) => (run.kind === 'single' ? [run.index] : run.indices))
-    const toolIndices = indices.filter((i) => descriptors[i].toolName !== null)
+    // Filtered calls are folded into the hidden-tools line inside the block, so
+    // naming them on the summary line above it would hand back exactly what the
+    // filter was asked to take away.
+    const toolIndices = indices.filter((i) => descriptors[i].toolName !== null && !descriptors[i].filtered)
 
     return (
       <TurnActivity

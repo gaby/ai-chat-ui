@@ -28,17 +28,21 @@ function startNewConversation() {
  */
 export function AppHeader() {
   const [conversationId] = useConversationIdFromUrl()
-  const { conversations, loaded } = useConversationsState()
+  const { conversations, loaded, failed } = useConversationsState()
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   const current = conversations.find((entry) => entry.id === conversationId)
   const isNew = conversationId === '/'
   // Until the store has been read there is no entry to find, which is not the
   // same as the conversation having no name — resolving it early flashed
-  // "Untitled chat" in the header and the tab on every reload.
-  const title = isNew ? 'New chat' : loaded ? conversationTitle(current) : ''
+  // "Untitled chat" in the header and the tab on every reload. A read that
+  // failed never resolves it either: the name is in the store and unreadable,
+  // so the heading says the neutral thing it does know rather than asserting
+  // the conversation is untitled, and the tab keeps the app's own title.
+  const named = loaded && !failed
+  const title = isNew ? 'New chat' : named ? conversationTitle(current) : failed ? 'Chat' : ''
 
-  useDocumentTitle(isNew || !loaded ? null : title)
+  useDocumentTitle(isNew || !named ? null : title)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

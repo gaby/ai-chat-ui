@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { requestBody } from '../conversation'
 
 // The default model (`text`, first in the registry) is the one the test server
 // advertises a builtin tool for, so no model selection is needed here.
@@ -17,7 +18,7 @@ test.describe('builtin tools', () => {
     await input.fill('Look something up')
     await input.press('Enter')
 
-    const body = (await requestPromise).postDataJSON() as Record<string, unknown>
+    const body = requestBody(await requestPromise)
     expect(body.builtinTools).toEqual(['web_search'])
   })
 
@@ -36,7 +37,7 @@ test.describe('builtin tools', () => {
     await input.fill('Never mind')
     await input.press('Enter')
 
-    const body = (await requestPromise).postDataJSON() as Record<string, unknown>
+    const body = requestBody(await requestPromise)
     expect(body.builtinTools).toEqual([])
   })
 
@@ -70,7 +71,7 @@ test.describe('builtin tools', () => {
     await input.fill('Read that page')
     await input.press('Enter')
 
-    const body = (await requestPromise).postDataJSON() as Record<string, unknown>
+    const body = requestBody(await requestPromise)
     expect(body.builtinTools).toEqual(['url_context'])
   })
 })

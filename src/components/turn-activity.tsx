@@ -1,4 +1,4 @@
-import { ChevronRightIcon, LoaderIcon, ShieldAlertIcon, SparklesIcon, XCircleIcon } from 'lucide-react'
+import { ChevronRightIcon, LoaderIcon, ShieldAlertIcon, ShieldXIcon, SparklesIcon, XCircleIcon } from 'lucide-react'
 import { type ReactNode } from 'react'
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -31,15 +31,14 @@ function summarize(toolNames: string[]): string {
 /**
  * Everything the agent did on the way to its answer, behind one line.
  *
- * A turn that reasons and calls four tools used to stack five cards above the
- * reply, so the answer started below the fold and the shape of the turn was
- * whatever the agent happened to do. Folded, it is one row that still names the
- * tools it ran; opened, every step keeps its own arguments and results — the
- * detail is a click away, not summarised out of existence.
+ * Folded, it is one row that still names the tools it ran; opened, every step
+ * keeps its own arguments and results — the detail is a click away, not
+ * summarised out of existence.
  *
  * It opens itself while the work is happening, because that is when watching it
- * is worth anything, and folds up once the answer lands. Anything that needs a
- * person — a pending approval, a failed call — holds it open instead.
+ * is worth anything, and folds up once the answer lands. Anything a person has
+ * to read or act on — a pending approval, a call that failed or was denied, a
+ * run that stopped partway — holds it open instead.
  */
 export function TurnActivity({ calls, hasReasoning, isStreaming, children }: TurnActivityProps) {
   // Nothing but thinking so far. The reasoning line is already a fold of its
@@ -49,14 +48,21 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
   // reported "Worked for 2s".
   const bare = calls.length === 0
 
+  const pending = calls.find((call) => !COMPLETE_TOOL_STATES.has(call.state))
   const needsApproval = calls.some((call) => call.state === 'approval-requested')
   const hasError = calls.some((call) => call.state === 'output-error')
-  // A decision to make or a failure to read is not something to fold away.
-  const held = needsApproval || hasError
+  const denied = calls.some((call) => call.state === 'output-denied')
+  // The run is over and a call never got an answer, so it stopped partway —
+  // either the run failed or someone hit stop. The card naming that call is the
+  // only account of where it stopped.
+  const stopped = !isStreaming && !needsApproval && pending !== undefined
+  // A decision to make, a decision made, or a run that did not finish: none of
+  // them is something to fold away a second later.
+  const held = needsApproval || hasError || denied || stopped
 
   const { open, onOpenChange, duration } = useStreamingDisclosure({ isStreaming, held })
 
-  const running = calls.find((call) => !COMPLETE_TOOL_STATES.has(call.state))?.name
+  const running = pending?.name
   const trail = summarize([...new Set(calls.map((call) => call.name))])
 
   let label: string
@@ -74,6 +80,14 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
     label = trail ? `Ran into a problem · ${trail}` : 'Ran into a problem'
     Icon = XCircleIcon
     tone = 'text-destructive'
+  } else if (stopped) {
+    label = trail ? `Stopped before finishing · ${trail}` : 'Stopped before finishing'
+    Icon = XCircleIcon
+    tone = 'text-destructive'
+  } else if (denied) {
+    label = trail ? `Denied · ${trail}` : 'Denied'
+    Icon = ShieldXIcon
+    tone = 'text-destructive'
   } else if (duration > 0) {
     label = trail ? `Worked for ${String(duration)}s · ${trail}` : `Worked for ${String(duration)}s`
   } else {
@@ -89,9 +103,10 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
     >
       {!bare && (
         <CollapsibleTrigger
-          // A stable name either way: the label says what happened, this says
-          // what the control does.
-          aria-label={open ? 'Hide activity' : 'Show activity'}
+          // The visible line is part of the name rather than replaced by it: a
+          // name that drops it leaves speech input unable to say the control
+          // (WCAG 2.5.3) and a screen reader unable to hear what the turn did.
+          aria-label={`${open ? 'Hide' : 'Show'} activity: ${label}`}
           className={cn(
             'text-muted-foreground hover:text-foreground group flex max-w-full items-center gap-1.5 text-sm transition-colors',
             tone,
@@ -103,7 +118,15 @@ export function TurnActivity({ calls, hasReasoning, isStreaming, children }: Tur
         </CollapsibleTrigger>
       )}
 
-      <CollapsibleContent className="data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 overflow-hidden">
+      {/* Mounted through the fold. Radix drops the content's children when it
+          closes, which throws away which cards the reader had opened and
+          restarts the reasoning trace's clock; `display` fades out on a discrete
+          transition so the fold still animates and stays out of the a11y tree
+          while closed. */}
+      <CollapsibleContent
+        forceMount
+        className="transition-discrete overflow-hidden transition-[opacity,display] duration-150 ease-out data-[state=closed]:hidden data-[state=closed]:opacity-0 starting:opacity-0"
+      >
         {/* One rail down the left, so a run of steps reads as a sequence rather
             than as unrelated cards that happen to be stacked. Bare, the same
             elements carry no rail and no indent — identical markup, so nothing
