@@ -1,0 +1,53 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { fetchConfig } from '../../src/lib/config'
+
+const respond = (body: unknown, init: { status?: number } = {}) => {
+  const status = init.status ?? 200
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) })),
+  )
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('fetchConfig', () => {
+  it('returns the configuration', async () => {
+    const config = { models: [{ id: 'a', name: 'a', builtinTools: [] }], builtinTools: [] }
+    respond(config)
+
+    await expect(fetchConfig()).resolves.toEqual(config)
+  })
+
+  it('rejects an error response instead of storing it as configuration', async () => {
+    // `fetch` resolves for a 500 as happily as for a 200, so the error body used
+    // to be cast to a configuration: the retry banner never appeared, and the
+    // first read of `models` threw during render.
+    respond({ detail: 'no providers configured' }, { status: 500 })
+
+    await expect(fetchConfig()).rejects.toThrow(/500/)
+  })
+
+  it('rejects a 200 that is not a configuration', async () => {
+    respond({ detail: 'something else entirely' })
+
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+  })
+
+  it('rejects arrays of the wrong shape', async () => {
+    // Checking only that `models` is an array let a well-formed envelope full of
+    // junk through, and it surfaced as blank options in the model select rather
+    // than as the retry banner.
+    respond({ models: [{ id: 'a' }], builtinTools: [] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+
+    respond({ models: [{ id: 'a', name: 'a', builtinTools: [7] }], builtinTools: [] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+
+    respond({ models: [], builtinTools: ['web_search'] })
+    await expect(fetchConfig()).rejects.toThrow(/models and builtin tools/)
+  })
+})

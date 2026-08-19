@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import Chat from './Chat.tsx'
+import { AppHeader } from './components/app-header.tsx'
 import { AppSidebar } from './components/app-sidebar.tsx'
 import { ThemeProvider } from './components/theme-provider.tsx'
-import { SidebarProvider } from './components/ui/sidebar.tsx'
+import { SidebarInset, SidebarProvider } from './components/ui/sidebar.tsx'
 import { Toaster } from './components/ui/sonner.tsx'
-import { cn } from './lib/utils.ts'
+import { TooltipProvider } from './components/ui/tooltip.tsx'
 import { migrateFromLocalStorage } from './lib/chat-db.ts'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -16,11 +17,6 @@ export default function App() {
 
   useEffect(() => {
     migrateFromLocalStorage()
-      .then((migrated) => {
-        if (migrated) {
-          window.dispatchEvent(new Event('conversations-changed'))
-        }
-      })
       .catch((err: unknown) => {
         console.error('Migration failed:', err)
       })
@@ -35,16 +31,15 @@ export default function App() {
         <SidebarProvider defaultOpen>
           <AppSidebar />
 
-          <div className="flex flex-col justify-center flex-1 h-screen overflow-hidden">
-            <div
-              className={cn(
-                'flex flex-col max-w-4xl mx-auto relative w-full basis-[100vh] overflow-hidden',
-                'has-[.stick-to-bottom:empty]:overflow-visible has-[.stick-to-bottom:empty]:basis-[0px] transition-[flex-basis] duration-200',
-              )}
-            >
-              {ready && <Chat />}
-            </div>
-          </div>
+          <SidebarInset className="h-svh min-w-0 overflow-hidden">
+            {/* Nested inside SidebarProvider on purpose: that component wraps
+                its children in a TooltipProvider of its own at delayDuration 0,
+                so a provider above it would have no effect here. */}
+            <TooltipProvider delayDuration={300}>
+              <AppHeader />
+              <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">{ready && <Chat />}</div>
+            </TooltipProvider>
+          </SidebarInset>
         </SidebarProvider>
       </ThemeProvider>
       <Toaster richColors />

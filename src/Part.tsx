@@ -1,21 +1,14 @@
-import { Message, MessageContent } from '@/components/ai-elements/message'
-
-import { Actions, Action } from '@/components/ai-elements/actions'
-import { Response } from '@/components/ai-elements/response'
-import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  PencilIcon,
-  RefreshCcwIcon,
-  XIcon,
-} from 'lucide-react'
+import { Markdown } from '@/components/markdown'
+import { CheckIcon, PencilIcon, RefreshCcwIcon, XIcon } from 'lucide-react'
 import type { ChatAddToolApproveResponseFunction, UIDataTypes, UIMessagePart, UITools, UIMessage } from 'ai'
 import { useEffect, useState } from 'react'
-import { useForkSiblings } from '@/hooks/useForkSiblings'
-import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
+import { CopyButton } from '@/components/copy-button'
+import { ForkNavigation } from '@/components/fork-navigation'
+import { MessageAction } from '@/components/message-action'
+import { MessageUsage } from '@/components/message-usage'
+import { ReasoningBlock } from '@/components/reasoning-block'
 import { ToolPart } from '@/components/tool-part'
+import { UserBubble } from '@/components/user-bubble'
 
 interface PartProps {
   part: UIMessagePart<UIDataTypes, UITools>
@@ -62,167 +55,123 @@ export function Part({
     }
   }, [isEditing])
 
-  function copy(text: string) {
-    navigator.clipboard.writeText(text).catch((error: unknown) => {
-      console.error('Error copying text:', error)
-    })
-  }
-
   if (part.type === 'text') {
     if (message.role === 'user' && isEditing) {
       return (
-        <div className="py-4">
-          <Message from="user">
-            <MessageContent>
-              <textarea
-                className="w-full bg-transparent resize-none outline-none text-sm min-h-[60px]"
-                value={editText}
-                onChange={(e) => {
-                  setEditText(e.target.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    onSubmitEdit?.(message.id, editText)
-                  } else if (e.key === 'Escape') {
-                    onCancelEdit?.(message.id, editText)
-                  }
-                }}
-                autoFocus
-              />
-            </MessageContent>
-          </Message>
-          <Actions className="mt-1 justify-end">
-            <Action
+        <div className="py-3">
+          <UserBubble className="w-full max-w-full sm:max-w-full">
+            <textarea
+              className="min-h-[60px] w-full resize-none bg-transparent text-sm outline-none"
+              value={editText}
+              onChange={(e) => {
+                setEditText(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  onSubmitEdit?.(message.id, editText)
+                } else if (e.key === 'Escape') {
+                  onCancelEdit?.(message.id, editText)
+                }
+              }}
+              autoFocus
+            />
+          </UserBubble>
+          <div className="mt-1 flex items-center justify-end gap-0.5">
+            <MessageAction
+              label="Submit edit"
               onClick={() => {
                 onSubmitEdit?.(message.id, editText)
               }}
-              label="Submit edit"
-              className="text-green-600 hover:text-green-700 dark:text-green-500 dark:hover:text-green-400"
+              className="text-primary hover:text-primary"
             >
-              <CheckIcon className="size-3" />
-            </Action>
-            <Action
+              <CheckIcon className="size-3.5" />
+            </MessageAction>
+            <MessageAction
+              label="Cancel edit"
               onClick={() => {
                 onCancelEdit?.(message.id, editText)
               }}
-              label="Cancel edit"
-              className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+              className="text-destructive hover:text-destructive"
             >
-              <XIcon className="size-3" />
-            </Action>
-          </Actions>
+              <XIcon className="size-3.5" />
+            </MessageAction>
+          </div>
         </div>
       )
     }
 
+    if (message.role === 'user') {
+      return (
+        <div className="py-3">
+          <UserBubble>
+            <Markdown>{part.text}</Markdown>
+          </UserBubble>
+          {/* `-mr-[7px]` undoes the icon buttons' own padding — a `size-7`
+              button around a `size-3.5` icon insets the glyph 7px — so the last
+              icon lines up with the bubble's right edge instead of floating
+              inside it. */}
+          {index === message.parts.length - 1 && (
+            <div className="mt-1 -mr-[7px] flex items-center justify-end gap-0.5">
+              {status !== 'submitted' && status !== 'streaming' && (
+                <>
+                  <MessageAction
+                    label="Edit message"
+                    onClick={() => {
+                      onStartEdit?.(message.id)
+                    }}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </MessageAction>
+                  <CopyButton text={part.text} label="Copy message" />
+                </>
+              )}
+              {conversationId && messageIndex !== undefined && onNavigateToFork && (
+                <ForkNavigation
+                  conversationId={conversationId}
+                  messageIndex={messageIndex}
+                  onNavigate={onNavigateToFork}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Assistant prose runs full width with no bubble: tool cards, code blocks
+    // and tables in the same turn then share one column and one measure.
     return (
-      <div className="py-4">
-        <Message from={message.role}>
-          <MessageContent>
-            <Response>{part.text}</Response>
-          </MessageContent>
-        </Message>
-        {message.role === 'assistant' && index === message.parts.length - 1 && (
-          <Actions className="mt-1">
-            <Action
+      <div>
+        {/* `h-auto` overrides the vendored Response's `size-full`, which stretched
+            inside this flex column and pushed the actions row out of the turn. */}
+        <Markdown className="h-auto text-[0.9375rem] leading-7">{part.text}</Markdown>
+        {/* `-ml-[7px]`: same correction as the user row, mirrored — the copy
+            glyph sits on the same left edge as the prose above it. */}
+        {index === message.parts.length - 1 && (
+          <div className="mt-1 -ml-[7px] flex items-center gap-0.5">
+            <CopyButton text={part.text} label="Copy response" />
+            <MessageAction
+              label="Regenerate response"
               onClick={() => {
                 regen(message.id)
               }}
-              label="Retry"
             >
-              <RefreshCcwIcon className="size-3" />
-            </Action>
-            <Action
-              onClick={() => {
-                copy(part.text)
-              }}
-              label="Copy"
-            >
-              <CopyIcon className="size-3" />
-            </Action>
-          </Actions>
-        )}
-        {message.role === 'user' && index === message.parts.length - 1 && (
-          <div className="flex items-center gap-2 mt-1 justify-end">
-            {status !== 'submitted' && status !== 'streaming' && (
-              <Actions className="opacity-0 group-hover/user-message:opacity-100 transition-opacity">
-                <Action
-                  onClick={() => {
-                    onStartEdit?.(message.id)
-                  }}
-                  label="Edit message"
-                >
-                  <PencilIcon className="size-3" />
-                </Action>
-              </Actions>
-            )}
-            {conversationId && messageIndex !== undefined && onNavigateToFork && (
-              <ForkNavigation
-                conversationId={conversationId}
-                messageIndex={messageIndex}
-                onNavigate={onNavigateToFork}
-              />
-            )}
+              <RefreshCcwIcon className="size-3.5" />
+            </MessageAction>
+            <MessageUsage message={message} />
           </div>
         )}
       </div>
     )
   } else if (part.type === 'reasoning') {
     return (
-      <Reasoning
-        className="w-full"
+      <ReasoningBlock
+        text={part.text}
         isStreaming={status === 'streaming' && index === message.parts.length - 1 && lastMessage}
-      >
-        <ReasoningTrigger />
-        <ReasoningContent>{part.text}</ReasoningContent>
-      </Reasoning>
+      />
     )
   } else if (part.type === 'dynamic-tool' || 'toolCallId' in part) {
     return <ToolPart part={part} onApprovalResponse={onApprovalResponse} />
   }
-}
-
-function ForkNavigation({
-  conversationId,
-  messageIndex,
-  onNavigate,
-}: {
-  conversationId: string
-  messageIndex: number
-  onNavigate: (conversationId: string) => void
-}) {
-  const { siblings, currentIndex, total } = useForkSiblings(conversationId, messageIndex)
-
-  if (total <= 1) return null
-
-  return (
-    <div className="flex items-center gap-0.5">
-      <button
-        type="button"
-        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
-        disabled={currentIndex === 0}
-        onClick={() => {
-          onNavigate(siblings[currentIndex - 1].id)
-        }}
-        aria-label="Previous fork"
-      >
-        <ChevronLeftIcon className="size-3.5" />
-      </button>
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {currentIndex + 1}/{total}
-      </span>
-      <button
-        type="button"
-        className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
-        disabled={currentIndex === total - 1}
-        onClick={() => {
-          onNavigate(siblings[currentIndex + 1].id)
-        }}
-        aria-label="Next fork"
-      >
-        <ChevronRightIcon className="size-3.5" />
-      </button>
-    </div>
-  )
 }

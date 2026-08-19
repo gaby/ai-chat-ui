@@ -2,9 +2,11 @@
 
 ## Feature Description
 
-In the side panel, a list of previous chats is displayed. Each chat entry includes a delete button (represented by a trash can icon) next to it. When the user clicks the delete button, a confirmation dialog appears asking, "Are you sure you want to delete this chat?" with "Cancel" and "Delete" options. If the user confirms the deletion, the selected chat is removed from the list and any associated data is deleted from the local storage. If the user cancels, no action is taken and the dialog closes.
+The side panel lists previous chats. Each chat's menu includes a Delete action. The action opens a confirmation dialog with Cancel and Delete controls. Confirming removes the chat and its messages; cancelling closes the dialog without changing the chat.
 
 ## Implementation Details
 
-- The chats are stored in local storage, just remove them from there.
+- Store conversations and messages in IndexedDB through `src/lib/chat-db.ts`.
+- Delete the conversation and messages in one transaction.
+- Prevent concurrent saves in other tabs from recreating deleted messages.
 - Use shadcn/lucide for the UI. The button should be visible only on hover.

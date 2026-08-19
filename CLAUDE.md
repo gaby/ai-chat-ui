@@ -46,7 +46,7 @@ Set `E2E_VIDEO=1` to record screen videos with `slowMo`. Set `E2E_TEST_DIR=<path
 
 Test infrastructure lives entirely in `tests/`:
 
-- `tests/server/server.py` — deterministic FastAPI server wired to pydantic-ai's `FunctionModel`. Defines the named model registry (`text`, `markdown`, `tool`, `multi-tool`, `repeated-tool`, `error`, `approval`, plus live `anthropic`/`openai`/`google`) that specs select via `sendMessage(page, '<name>', '...')`.
+- `tests/server/server.py` — deterministic FastAPI server wired to pydantic-ai's `FunctionModel`. Its `models` mapping is the authoritative fixture registry; specs select entries via `sendMessage(page, '<name>', '...')`.
 - `tests/chat-client.ts`, `tests/global-setup.ts` — Vitest helpers that spawn an ephemeral test server on an OS-assigned port.
 - `tests/e2e/deterministic/*.spec.ts` — Playwright specs run on every PR against `FunctionModel`-backed fixtures.
 - `tests/e2e/offline/*.spec.ts` — Playwright specs against the built `offline/index.html` with every non-loopback request aborted, so an asset that stops being inlined fails the run instead of being quietly served by the real CDN.
@@ -57,20 +57,30 @@ Test infrastructure lives entirely in `tests/`:
 
 ### Frontend Structure
 
-- **src/Chat.tsx**: Main chat component handling conversation state, message sending, and local storage persistence
+- **src/Chat.tsx**: Main chat component handling conversation state, message sending, and persistence coordination
 - **src/Part.tsx**: Renders individual message parts (text, reasoning, tools, etc.)
 - **src/App.tsx**: Root component with theme provider, sidebar, and React Query setup
 - **src/components/ai-elements/**: Vercel AI Elements wrappers (conversation, prompt-input, message, tool, reasoning, sources, etc.)
 - **src/components/ui/**: Radix UI and shadcn/ui components
 
+The shell is composed as sidebar → `AppHeader` → conversation → `ChatComposer`:
+
+- **app-header.tsx**: sidebar toggle, conversation title (also the tab title), new chat, theme toggle
+- **welcome-screen.tsx**: empty-conversation state with suggested prompts
+- **assistant-turn.tsx** / **user-bubble.tsx**: per-role message layout. An assistant turn is one avatar-gutter column holding that turn's reasoning, tool cards and prose
+- **chat-composer.tsx**: message box plus the per-run settings (model, effort, builtin tools) and the stop control
+- **tool-part-header.tsx**: collapsed tool-card row, including the one-line argument preview from `lib/tool-summary.ts`
+
 ### Key Frontend Concepts
 
 **Conversation Management:**
 
-- Conversations stored in localStorage by ID (nanoid)
+- Conversations and messages are stored by ID in the `chat-storage` IndexedDB database
 - URL-based routing: `/` for new chat, `/{nanoid}` for existing
-- Messages persisted via `useChat` hook and localStorage sync (throttled 500ms)
-- Conversation list stored in localStorage key `conversationIds`
+- Messages are persisted from the active SDK chat session on a 500ms throttle
+- Access persistence through `src/lib/chat-db.ts`
+- Include both stores in message-write and deletion transactions to serialize them across tabs
+- `App` migrates legacy `localStorage` conversations once on startup
 
 **Model & Tool Selection:**
 
@@ -100,6 +110,16 @@ Test infrastructure lives entirely in `tests/`:
   - Accepts `model` and `builtinTools` in request body extra data
   - Streams responses using SSE
 
+**Token usage:**
+
+The UI shows per-reply and per-conversation token counts, read from `UIMessage.metadata.usage` on assistant messages:
+
+```json
+{ "usage": { "inputTokens": 120, "outputTokens": 30, "totalTokens": 150, "requests": 1, "toolCalls": 0 } }
+```
+
+`snake_case` keys are accepted too. A backend puts them there by writing `ModelResponse.metadata` before the adapter emits its `message-metadata` chunk — see `UsageEventStream` in `tests/server/server.py` for a working ~20-line implementation. The figures are per-message, not per-run: when the trailing message a run receives is already an assistant message (an approval continuation), the client keeps that message and deep-merges the new metadata into it, so a backend must add its run's usage to what that message already carries rather than assign it. `Agent.to_web()` does not report usage today (it hardcodes `VercelAIAdapter` with no seam), so agents served that way fall back to a locally-derived estimate, which the UI labels with `~`.
+
 **Builtin Tools:**
 
 - `web_search`, `code_execution`, `image_generation`
@@ -124,7 +144,7 @@ File names are kebab-case (`tool-approval-prompt.tsx`); exported component names
 
 `src/components/ui/` (shadcn) and `src/components/ai-elements/` (Vercel AI Elements) are vendored from upstream registries. Treat them as read-only: never modify in place. To customize behavior, wrap the primitive in a new file under `src/components/`. To upgrade, re-run `npx shadcn@latest add <name>` (or `@ai-elements/<name>`) and review the diff.
 
-A small number of pre-existing local modifications survive in these folders (e.g. the Dialog-based error display in `ai-elements/tool.tsx` from #11). Each is tagged with a `// local modification:` comment. Leave those as they are, but don't add new ones — extract a wrapper instead.
+Two normalizations are part of vendoring itself, not local modifications: files are formatted with the repo's Prettier config, and Radix imports use the granular `@radix-ui/react-<name>` package instead of the `radix-ui` umbrella the current shadcn generator emits — the umbrella pins its own copies of internal primitives (react-dismissable-layer, react-focus-scope, react-primitive), which made the single-file offline artifact ship two of each. Apply both when re-vendoring; a diff that consists only of these is not a modification.
 
 ## Configuration
 

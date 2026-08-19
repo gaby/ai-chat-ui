@@ -8,7 +8,7 @@ Built with [Vercel AI SDK](https://sdk.vercel.ai/) and designed to work with Pyd
 
 - Streaming message responses with reasoning display
 - Tool call visualization with collapsible input/output
-- Conversation persistence via localStorage
+- Conversation persistence via IndexedDB, with migration from legacy localStorage data
 - Dynamic model and tool selection
 - Dark/light theme support
 - Mobile-responsive sidebar
