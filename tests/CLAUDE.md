@@ -2,7 +2,7 @@
 
 ## Paradigm: server-driven, no `page.route` mocks
 
-All deterministic tests drive the real FastAPI server at `tests/server/server.py`, which uses pydantic-ai's `FunctionModel` to return predictable streams. The named entries in `models` (`text`, `markdown`, `tool`, `multi-tool`, `repeated-tool`, `error`, `approval`) are the test fixtures — a spec picks one via `sendMessage(page, '<name>', '<message>')`.
+All deterministic tests drive the real FastAPI server at `tests/server/server.py`, which uses pydantic-ai's `FunctionModel` to return predictable streams. The `models` mapping is the authoritative fixture registry. A spec picks an entry via `sendMessage(page, '<name>', '<message>')`.
 
 When you need new behavior, add a `FunctionModel` to the server's `models` dict and select it from the spec. **Do not** introduce `page.route` mocks — they duplicated the SSE wire format and drifted on the SDK v5→v6 bump, which is why we switched.
 

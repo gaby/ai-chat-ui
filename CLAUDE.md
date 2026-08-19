@@ -46,7 +46,7 @@ Set `E2E_VIDEO=1` to record screen videos with `slowMo`. Set `E2E_TEST_DIR=<path
 
 Test infrastructure lives entirely in `tests/`:
 
-- `tests/server/server.py` — deterministic FastAPI server wired to pydantic-ai's `FunctionModel`. Defines the named model registry (`text`, `markdown`, `tool`, `multi-tool`, `repeated-tool`, `error`, `approval`, plus live `anthropic`/`openai`/`google`) that specs select via `sendMessage(page, '<name>', '...')`.
+- `tests/server/server.py` — deterministic FastAPI server wired to pydantic-ai's `FunctionModel`. Its `models` mapping is the authoritative fixture registry; specs select entries via `sendMessage(page, '<name>', '...')`.
 - `tests/chat-client.ts`, `tests/global-setup.ts` — Vitest helpers that spawn an ephemeral test server on an OS-assigned port.
 - `tests/e2e/deterministic/*.spec.ts` — Playwright specs run on every PR against `FunctionModel`-backed fixtures.
 - `tests/e2e/offline/*.spec.ts` — Playwright specs against the built `offline/index.html` with every non-loopback request aborted, so an asset that stops being inlined fails the run instead of being quietly served by the real CDN.
@@ -57,7 +57,7 @@ Test infrastructure lives entirely in `tests/`:
 
 ### Frontend Structure
 
-- **src/Chat.tsx**: Main chat component handling conversation state, message sending, and local storage persistence
+- **src/Chat.tsx**: Main chat component handling conversation state, message sending, and persistence coordination
 - **src/Part.tsx**: Renders individual message parts (text, reasoning, tools, etc.)
 - **src/App.tsx**: Root component with theme provider, sidebar, and React Query setup
 - **src/components/ai-elements/**: Vercel AI Elements wrappers (conversation, prompt-input, message, tool, reasoning, sources, etc.)
@@ -75,10 +75,12 @@ The shell is composed as sidebar → `AppHeader` → conversation → `ChatCompo
 
 **Conversation Management:**
 
-- Conversations stored in localStorage by ID (nanoid)
+- Conversations and messages are stored by ID in the `chat-storage` IndexedDB database
 - URL-based routing: `/` for new chat, `/{nanoid}` for existing
-- Messages persisted via `useChat` hook and localStorage sync (throttled 500ms)
-- Conversation list stored in localStorage key `conversationIds`
+- Messages are persisted from the active SDK chat session on a 500ms throttle
+- Access persistence through `src/lib/chat-db.ts`
+- Include both stores in message-write and deletion transactions to serialize them across tabs
+- `App` migrates legacy `localStorage` conversations once on startup
 
 **Model & Tool Selection:**
 

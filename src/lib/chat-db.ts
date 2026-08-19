@@ -8,6 +8,7 @@ const CONVERSATIONS_STORE = 'conversations'
 const MESSAGES_STORE = 'messages'
 
 let dbPromise: Promise<IDBDatabase> | null = null
+let migrationPromise: Promise<boolean> | null = null
 
 /**
  * Notify every reader that the conversation store changed.
@@ -371,20 +372,35 @@ export async function saveMessages(
 ): Promise<void> {
   if (deletedConversations.has(conversationId)) return
 
+  const write = { happened: false }
   try {
     const db = await openDatabase()
-    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
-    const store = tx.objectStore(MESSAGES_STORE)
+    // Include the conversation store so this write and a deletion in another
+    // tab cannot pass each other. If this transaction runs first, the delete
+    // waits and removes both records afterwards. If the delete runs first, the
+    // missing conversation suppresses this write instead of restoring history
+    // the user deleted.
+    const tx = db.transaction([CONVERSATIONS_STORE, MESSAGES_STORE], 'readwrite')
+    const conversations = tx.objectStore(CONVERSATIONS_STORE)
+    const storedMessages = tx.objectStore(MESSAGES_STORE)
+    const conversation = conversations.get(conversationId)
 
-    if (insertOnly) {
-      // Read and write in the one transaction, so nothing can store a history
-      // between the two and have it overwritten here.
-      const read = store.get(conversationId)
-      read.onsuccess = () => {
-        if (read.result === undefined) store.put({ id: conversationId, messages })
+    conversation.onsuccess = () => {
+      if (conversation.result === undefined) return
+
+      if (insertOnly) {
+        // Read and write in the one transaction, so nothing can store a history
+        // between the two and have it overwritten here.
+        const existingMessages = storedMessages.get(conversationId)
+        existingMessages.onsuccess = () => {
+          if (existingMessages.result !== undefined) return
+          storedMessages.put({ id: conversationId, messages })
+          write.happened = true
+        }
+      } else {
+        storedMessages.put({ id: conversationId, messages })
+        write.happened = true
       }
-    } else {
-      store.put({ id: conversationId, messages })
     }
     await transactionDone(tx, 'Failed to save messages')
   } catch (error) {
@@ -396,14 +412,28 @@ export async function saveMessages(
   // failure to stamp the activity is a stale sidebar timestamp, not lost
   // messages. Reporting it as "your browser storage may be full" and rejecting
   // the save would be wrong on both counts.
-  if (touch) {
+  if (write.happened && touch) {
     await touchConversation(conversationId, Date.now()).catch((error: unknown) => {
       console.error('Failed to record conversation activity:', error)
     })
   }
 }
 
-export async function migrateFromLocalStorage(): Promise<boolean> {
+export function migrateFromLocalStorage(): Promise<boolean> {
+  if (migrationPromise) return migrationPromise
+
+  const migration = runMigration()
+  migrationPromise = migration
+  const clear = () => {
+    if (migrationPromise === migration) migrationPromise = null
+  }
+  // React Strict Mode starts effects twice in development. Share one migration
+  // while it is running, then permit an explicit retry after either outcome.
+  void migration.then(clear, clear)
+  return migration
+}
+
+async function runMigration(): Promise<boolean> {
   const migrationKey = 'indexeddb-migration-complete'
   if (localStorage.getItem(migrationKey)) {
     return false

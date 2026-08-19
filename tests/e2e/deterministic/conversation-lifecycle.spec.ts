@@ -68,6 +68,37 @@ test.describe('conversation lifecycle', () => {
     await expect(chat(page).getByText('Delete me for good')).toHaveCount(0)
   })
 
+  test('deletion wins over a pending save from another tab', async ({ context, page }) => {
+    await page.goto('/')
+    await sendMessage(page, 'text', 'Delete across tabs')
+    await expect(chat(page).getByText('Hello from the test server')).toBeVisible()
+    await waitForPersisted(page)
+    const deletedUrl = page.url()
+
+    const otherPage = await context.newPage()
+    await otherPage.goto(deletedUrl)
+    await expect(chat(otherPage).getByText('Delete across tabs')).toBeVisible()
+
+    // Queue a throttled write in another tab, then delete before its 500ms
+    // delay expires. An in-memory tombstone exists only in the deleting tab;
+    // without an IndexedDB-level guard, this write recreates the message record
+    // after deletion and the supposedly deleted history remains at its URL.
+    await sendMessage(otherPage, 'slow', 'Write after deletion')
+    await expect(otherPage.getByRole('button', { name: 'Stop generating' })).toBeVisible()
+
+    await conversationAction(page, 'Delete across tabs', 'Delete')
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+    await expect(page.getByText('Chat deleted successfully')).toBeVisible()
+
+    const saveAttempted = Date.now() + 1500
+    await page.waitForFunction((until) => Date.now() >= until, saveAttempted)
+
+    await page.goto(deletedUrl)
+    await expect(page.getByRole('heading', { name: 'How can I help?' })).toBeVisible()
+    await expect(chat(page).getByText('Delete across tabs')).toHaveCount(0)
+    await expect(chat(page).getByText('Write after deletion')).toHaveCount(0)
+  })
+
   test('Back does not reopen the conversation that was just deleted', async ({ page }) => {
     await page.goto('/')
     await sendMessage(page, 'text', 'Gone for good')
