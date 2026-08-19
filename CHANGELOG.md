@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/pydantic/ai-chat-ui/compare/v2.1.0...v2.2.0) (2026-08-19)
+
+
+### Features
+
+* **ui:** refactor the chat interface around a modern design ([#45](https://github.com/pydantic/ai-chat-ui/issues/45)) ([14be1aa](https://github.com/pydantic/ai-chat-ui/commit/14be1aaa0bae75c67cfe30380498a7317b6bc9ba))
+
 # [2.1.0](https://github.com/pydantic/ai-chat-ui/compare/v2.0.0...v2.1.0) (2026-08-10)
 
 
