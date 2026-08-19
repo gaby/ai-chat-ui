@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/pydantic/ai-chat-ui/compare/v2.2.0...v2.3.0) (2026-08-19)
+
+
+### Features
+
+* support runtime path configuration ([#47](https://github.com/pydantic/ai-chat-ui/issues/47)) ([52f67c1](https://github.com/pydantic/ai-chat-ui/commit/52f67c1f76bcb76b67c49f4dd9701c0172fa5386))
+
 # [2.2.0](https://github.com/pydantic/ai-chat-ui/compare/v2.1.0...v2.2.0) (2026-08-19)
 
 
